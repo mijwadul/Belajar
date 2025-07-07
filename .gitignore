@@ -1,0 +1,99 @@
+# #################### #
+# # Lingkungan Python #
+# #################### #
+
+# Direktori Virtual Environment
+# Mengabaikan folder venv di direktori manapun
+venv/
+*/venv/
+.venv/
+
+# Cache Python dan file yang dikompilasi
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database SQLite
+*.sqlite3
+*.db
+app.db
+
+# Direktori hasil instalasi pip
+/dist/
+/build/
+
+# Catatan instalasi
+pip-wheel-metadata/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# File environment (Sangat Penting untuk Keamanan)
+.env
+.env.*
+!.env.example
+
+# ################### #
+# # Lingkungan Node.js #
+# ################### #
+
+# Log
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Direktori hasil build dan dependensi
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+.svelte-kit/
+.vercel/
+
+# File environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ################ #
+# # Sistem Operasi #
+# ################ #
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+
+# ################## #
+# # Editor & IDE #
+# ################## #
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Lainnya
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
