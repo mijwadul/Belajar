@@ -1,0 +1,12 @@
+Flask
+python-dotenv
+Flask-SQLAlchemy
+Flask-Migrate
+Flask-Cors
+google-generativeai
+PyPDF2
+python-docx
+easyocr
+torch
+torchvision
+torchaudio
