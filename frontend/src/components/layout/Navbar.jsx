@@ -12,24 +12,38 @@ import {
     Menu,
     MenuItem,
     useMediaQuery,
-    useTheme
+    useTheme,
+    Typography
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 
 // Pastikan Anda sudah menempatkan logo di folder 'src/assets/'
-import logo from '../../assets/logo.png';
+// Jika belum ada logo, baris ini bisa menyebabkan error. Anda bisa memberi komentar dulu.
+import logo from '../../assets/logo.png'; 
 
 function Navbar() {
     const [isAuth, setIsAuth] = useState(isAuthenticated());
+    const [userRole, setUserRole] = useState(null);
     const [anchorEl, setAnchorEl] = useState(null); // State untuk mengontrol menu mobile
+
     const navigate = useNavigate();
-    const location = useLocation();
+    const location = useLocation(); // Hook untuk mendeteksi perubahan URL
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md')); // true jika layar 'medium' atau lebih kecil
 
-    // useEffect untuk memperbarui status otentikasi setiap kali URL berubah
+    // useEffect untuk memperbarui status otentikasi dan peran setiap kali URL berubah
     useEffect(() => {
-        setIsAuth(isAuthenticated());
+        const checkAuth = () => {
+            const authStatus = isAuthenticated();
+            setIsAuth(authStatus);
+            if (authStatus) {
+                const user = JSON.parse(localStorage.getItem('user'));
+                setUserRole(user ? user.role : null);
+            } else {
+                setUserRole(null);
+            }
+        };
+        checkAuth();
     }, [location]);
 
     const handleMenuOpen = (event) => {
@@ -41,13 +55,13 @@ function Navbar() {
     };
 
     const handleLogout = () => {
-        handleMenuClose(); // Tutup menu jika sedang terbuka di mobile
+        handleMenuClose();
         logoutUser();
         setIsAuth(false);
+        setUserRole(null);
         navigate('/login');
     };
 
-    // Fungsi bantuan untuk navigasi dari menu mobile agar menu tertutup setelah diklik
     const handleMenuClick = (path) => {
         handleMenuClose();
         navigate(path);
@@ -61,6 +75,12 @@ function Navbar() {
             <Button color="inherit" component={RouterLink} to="/perpustakaan-rpp">Perpustakaan RPP</Button>
             <Button color="inherit" component={RouterLink} to="/generator-soal">Generator Soal</Button>
             <Button color="inherit" component={RouterLink} to="/bank-soal">Bank Soal</Button>
+            
+            {/* Tampilkan tombol Manajemen User hanya untuk Admin atau Super User */}
+            {(userRole === 'Admin' || userRole === 'Super User') && (
+                <Button color="inherit" component={RouterLink} to="/admin/dashboard">Manajemen User</Button>
+            )}
+
             <Button color="inherit" onClick={handleLogout}>Logout</Button>
         </Box>
     );
@@ -77,16 +97,27 @@ function Navbar() {
                 <MenuItem onClick={() => handleMenuClick('/perpustakaan-rpp')}>Perpustakaan RPP</MenuItem>
                 <MenuItem onClick={() => handleMenuClick('/generator-soal')}>Generator Soal</MenuItem>
                 <MenuItem onClick={() => handleMenuClick('/bank-soal')}>Bank Soal</MenuItem>
+                
+                {/* Tampilkan menu item Manajemen User hanya untuk Admin atau Super User */}
+                {(userRole === 'Admin' || userRole === 'Super User') && (
+                    <MenuItem onClick={() => handleMenuClick('/admin/dashboard')}>Manajemen User</MenuItem>
+                )}
+
                 <MenuItem onClick={handleLogout}>Logout</MenuItem>
             </Menu>
         </>
     );
-
+    
     return (
         <AppBar position="sticky" color="primary">
             <Toolbar sx={{ justifyContent: 'space-between' }}>
                 <Box component={RouterLink} to={isAuth ? "/kelas" : "/"}>
-                    <img src={logo} alt="SinerGi-AI Logo" style={{ height: '40px', verticalAlign: 'middle' }} />
+                    {/* Jika logo ada, tampilkan. Jika tidak, tampilkan teks. */}
+                    {logo ? (
+                        <img src={logo} alt="SinerGi-AI Logo" style={{ height: '40px', verticalAlign: 'middle' }} />
+                    ) : (
+                        <Typography variant="h6" component="div">SinerGi-AI</Typography>
+                    )}
                 </Box>
 
                 {isAuth ? (

@@ -3,6 +3,7 @@ python-dotenv
 Flask-SQLAlchemy
 Flask-Migrate
 Flask-Cors
+Flask-JWT-Extended
 google-generativeai
 PyPDF2
 python-docx

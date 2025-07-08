@@ -13,6 +13,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import RoleBasedProtectedRoute from './components/auth/RoleBasedProtectedRoute';
 
 // Import Semua Halaman
+import UserManagementPage from './pages/admin/UserManagementPage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
@@ -59,10 +60,8 @@ function App() {
                 <Route path="/bank-soal" element={<BankSoalPage />} />
                 <Route path="/soal/:id" element={<SoalDetailPage />} />
 
-                {/* --- Rute KHUSUS ADMIN & SUPER USER --- */}
                 <Route element={<RoleBasedProtectedRoute allowedRoles={['Admin', 'Super User']} />}>
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  {/* Tambahkan rute admin lainnya di sini jika ada */}
+                  <Route path="/admin/dashboard" element={<UserManagementPage />} />
                 </Route>
               </Route>
             </Routes>
