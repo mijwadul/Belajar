@@ -15,7 +15,7 @@ const getAuthHeader = () => {
 };
 
 /**
- * Mendaftarkan pengguna baru.
+ * Mendaftarkan pengguna baru (default sebagai Guru).
  * @param {object} userData - Data pengguna (nama_lengkap, email, password).
  */
 export const registerUser = async (userData) => {
@@ -88,14 +88,37 @@ export const getAllUsers = async () => {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
-            ...getAuthHeader(), // Kunci perbaikan ada di sini
+            ...getAuthHeader(),
         },
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.msg || data.error || 'Gagal mengambil data pengguna.');
+        throw new Error(data.error || 'Gagal mengambil data pengguna.');
+    }
+
+    return data;
+};
+
+/**
+ * Membuat pengguna baru melalui dasbor admin.
+ * @param {object} userData - Data pengguna baru (nama_lengkap, email, password, role).
+ */
+export const createUser = async (userData) => {
+    const response = await fetch(`${API_URL}/create-user`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader(), // Sertakan token otentikasi
+        },
+        body: JSON.stringify(userData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Gagal membuat pengguna baru.');
     }
 
     return data;
