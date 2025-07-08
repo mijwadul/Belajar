@@ -3,7 +3,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, Container, Box, Typography } from '@mui/material';
+import { CssBaseline, Container, Box } from '@mui/material';
 
 // Import Tema dan Komponen Layout
 import theme from './theme';
@@ -14,7 +14,6 @@ import RoleBasedProtectedRoute from './components/auth/RoleBasedProtectedRoute';
 
 // Import Semua Halaman
 import UserManagementPage from './pages/admin/UserManagementPage';
-import EditUserPage from './pages/admin/EditUserPage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
@@ -28,8 +27,7 @@ import QuizGeneratorPage from './pages/QuizGeneratorPage';
 import BankSoalPage from './pages/BankSoalPage';
 import SoalDetailPage from './pages/SoalDetailPage';
 
-// Placeholder untuk halaman Admin
-const AdminDashboard = () => <Typography variant="h4">Admin Dashboard</Typography>;
+
 
 function App() {
   return (
