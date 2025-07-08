@@ -111,3 +111,29 @@ def create_user():
     db.session.commit()
 
     return jsonify({'message': f'Pengguna {nama_lengkap} berhasil dibuat dengan peran {role_str}.', 'user': new_user.to_dict()}), 201
+
+@bp.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def delete_user(user_id):
+    """Endpoint untuk menghapus pengguna (khusus Admin/Super User)."""
+    # 1. Periksa peran pengguna yang sedang login
+    claims = get_jwt()
+    current_user_role = claims.get('role')
+    if current_user_role not in ['Admin', 'Super User']:
+        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
+
+    # 2. Periksa agar pengguna tidak bisa menghapus dirinya sendiri
+    current_user_id = get_jwt_identity()
+    if current_user_id == user_id:
+        return jsonify({'error': 'Anda tidak dapat menghapus akun Anda sendiri.'}), 400
+
+    # 3. Cari pengguna yang akan dihapus
+    user_to_delete = User.query.get(user_id)
+    if not user_to_delete:
+        return jsonify({'error': 'Pengguna tidak ditemukan.'}), 404
+
+    # 4. Hapus pengguna dari database
+    db.session.delete(user_to_delete)
+    db.session.commit()
+
+    return jsonify({'message': f'Pengguna dengan ID {user_id} berhasil dihapus.'}), 200

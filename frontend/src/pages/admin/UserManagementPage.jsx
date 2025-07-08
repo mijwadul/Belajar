@@ -1,14 +1,15 @@
 // frontend/src/pages/admin/UserManagementPage.jsx
 
 import React, { useEffect, useState } from 'react';
-import { getAllUsers, createUser } from '../../api/authService';
+import { getAllUsers, createUser, deleteUser } from '../../api/authService';
 import {
     Container, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, CircularProgress, Alert, Box, Button, Dialog,
     DialogActions, DialogContent, DialogTitle, TextField, Select, MenuItem,
-    FormControl, InputLabel
+    FormControl, InputLabel, IconButton
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 function UserManagementPage() {
     const [users, setUsers] = useState([]);
@@ -70,6 +71,19 @@ function UserManagementPage() {
         }
     };
 
+    const handleDeleteUser = async (userId) => {
+        // Tampilkan dialog konfirmasi browser
+        if (window.confirm('Apakah Anda yakin ingin menghapus pengguna ini?')) {
+            try {
+                await deleteUser(userId);
+                // Muat ulang daftar pengguna agar data terbarui
+                fetchUsers();
+            } catch (err) {
+                setPageError(err.message);
+            }
+        }
+    };
+
     if (loading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}><CircularProgress /></Box>;
     }
@@ -87,7 +101,7 @@ function UserManagementPage() {
             
             {pageError && <Alert severity="error" sx={{ mb: 2 }}>{pageError}</Alert>}
 
-            {/* BAGIAN TABEL YANG HILANG, SEKARANG DIKEMBALIKAN */}
+            {/* 3. BAGIAN TABEL YANG DIKEMBALIKAN */}
             <TableContainer component={Paper}>
                 <Table sx={{ minWidth: 650 }} aria-label="Tabel Pengguna">
                     <TableHead>
@@ -96,22 +110,28 @@ function UserManagementPage() {
                             <TableCell sx={{ fontWeight: 'bold' }}>Nama Lengkap</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>Peran</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 'bold' }}>Aksi</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {users.map((user) => (
-                            <TableRow key={user.id}>
+                            <TableRow key={user.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                                 <TableCell>{user.id}</TableCell>
                                 <TableCell>{user.nama_lengkap}</TableCell>
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell>{user.role}</TableCell>
+                                <TableCell align="center">
+                                    <IconButton color="error" onClick={() => handleDeleteUser(user.id)}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
             </TableContainer>
 
-            {/* DIALOG/MODAL UNTUK TAMBAH PENGGUNA */}
+            {/* Dialog/Modal untuk tambah pengguna */}
             <Dialog open={openModal} onClose={handleCloseModal}>
                 <DialogTitle>Buat Pengguna Baru</DialogTitle>
                 <DialogContent>

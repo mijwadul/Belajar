@@ -123,3 +123,24 @@ export const createUser = async (userData) => {
 
     return data;
 };
+
+/**
+ * Menghapus pengguna berdasarkan ID (memerlukan hak akses Admin).
+ * @param {number} userId - ID pengguna yang akan dihapus.
+ */
+export const deleteUser = async (userId) => {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+            ...getAuthHeader(), // Sertakan token otentikasi
+        },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Gagal menghapus pengguna.');
+    }
+
+    return data;
+};
