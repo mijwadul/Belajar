@@ -153,6 +153,7 @@ def bulk_import_siswa(kelas_id):
                 sub_transaction.rollback()
                 continue
 
+            # Check for duplicates within the current Excel file being processed
             if current_nisn in processed_nisns_in_batch:
                 fail_count += 1
                 errors.append(f"Siswa dengan NISN {current_nisn} adalah duplikat di file Excel ini, dilewati.")
@@ -166,19 +167,18 @@ def bulk_import_siswa(kelas_id):
             if existing_siswa_global:
                 siswa_obj = existing_siswa_global
                 
-                # PENTING: Refresh objek kelas utama untuk memastikan relasinya mutakhir.
-                # Ini akan memuat ulang status terbaru dari database, termasuk siswa
-                # yang ditambahkan di sub-transaksi sebelumnya dalam batch ini.
-                db.session.refresh(main_kelas_obj)
+                # REVISED CHECK: Refresh the existing student object and then check its relationships
+                # This ensures `siswa_obj.kelas_terdaftar` is up-to-date with any changes committed in previous sub-transactions
+                db.session.refresh(siswa_obj) # Important: Refresh the specific student object
 
-                # Sekarang, periksa apakah siswa sudah ada di koleksi yang dimuat ulang.
-                # Ini seharusnya secara akurat mencerminkan siswa yang ditambahkan di iterasi sebelumnya.
-                if siswa_obj in main_kelas_obj.siswa:
+                # Check if the main_kelas_obj is already in the student's list of enrolled classes
+                if main_kelas_obj in siswa_obj.kelas_terdaftar:
                     fail_count += 1
                     errors.append(f"Siswa {siswa_obj.nama_lengkap} (NISN: {siswa_obj.nisn}) sudah terdaftar di kelas ini, dilewati.")
                     sub_transaction.rollback()
                     continue
-            else:
+                
+            else: # If the student does not exist globally, create a new one
                 try:
                     tanggal_lahir_str = student_data.get('tanggal_lahir')
                     tanggal_lahir_obj = None
@@ -202,12 +202,12 @@ def bulk_import_siswa(kelas_id):
                     nomor_hp=student_data.get('nomor_hp')
                 )
                 db.session.add(siswa_obj) 
-                db.session.flush()
+                db.session.flush() # Flush to assign an ID to the new siswa_obj before relationship append
             
-            # Baris ini hanya akan dicapai jika siswa baru atau sudah ada tetapi belum terdaftar.
+            # This line is reached if the student is new or exists globally but is not yet enrolled in this class.
             main_kelas_obj.siswa.append(siswa_obj)
             
-            sub_transaction.commit() 
+            sub_transaction.commit() # Commit the nested transaction
             
             success_count += 1
             processed_nisns_in_batch.add(current_nisn)
@@ -230,7 +230,7 @@ def bulk_import_siswa(kelas_id):
             errors.append(f"Gagal mengimpor siswa '{nama_lengkap}' (NISN: {current_nisn}): {str(e)}")
             print(f"General Error importing student {nama_lengkap}: {e}")
 
-    db.session.commit()
+    db.session.commit() # Final commit for the main transaction
 
     return jsonify({
         "message": f"Proses impor selesai: {success_count} siswa berhasil, {fail_count} gagal atau dilewati.",

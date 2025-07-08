@@ -1,3 +1,5 @@
+// frontend/src/pages/ClassListPage.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getKelas, tambahKelas } from '../api/classroomService';
@@ -186,19 +188,21 @@ function ClassListPage() {
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                                     <Button
                                         variant="contained"
-                                        onClick={() => navigate(`/kelas/${kelasTerpilih.id}`)} // Perbaikan: dulu ke /kelas/:id/siswa
+                                        onClick={() => navigate(`/kelas/${kelasTerpilih.id}`)}
                                     >
                                         Kelola Siswa
                                     </Button>
+                                    {/* PERBAIKAN: Rute Absensi */}
                                     <Button
                                         variant="outlined"
-                                        onClick={() => navigate(`/absensi/${kelasTerpilih.id}`)}
+                                        onClick={() => navigate(`/kelas/${kelasTerpilih.id}/absensi`)}
                                     >
                                         Absensi
                                     </Button>
+                                    {/* PERBAIKAN: Rute RPP Generator */}
                                     <Button
                                         variant="outlined"
-                                        onClick={() => navigate('/generate-rpp', { state: { kelasData: kelasTerpilih } })}
+                                        onClick={() => navigate('/generator-rpp', { state: { kelasData: kelasTerpilih } })}
                                     >
                                         Buat RPP untuk Kelas Ini
                                     </Button>

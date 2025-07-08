@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
-import { getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, updateSiswa, deleteSiswa, bulkImportSiswa } from '../api/classroomService'; // Import bulkImportSiswa
+// frontend/src/pages/StudentManagementPage.jsx
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, Link as RouterLink } from 'react-router-dom'; // Menggunakan RouterLink
+import { getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, updateSiswa, deleteSiswa, bulkImportSiswa } from '../api/classroomService'; // PERBAIKAN: Jalur impor yang benar
 import * as XLSX from 'xlsx';
 
 import {
@@ -16,7 +18,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'; // Pastikan ini diimpor
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 
@@ -44,7 +46,7 @@ function StudentManagementPage() {
     };
     const [formSiswa, setFormSiswa] = useState(initialFormState);
 
-    // State for Edit Student Dialog (using Material-UI Dialog now)
+    // State for Material-UI Dialog
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [siswaUntukDiedit, setSiswaUntukDiedit] = useState(null);
 
@@ -331,197 +333,202 @@ function StudentManagementPage() {
     };
 
 
-    if (!kelas) return (
-        <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-            <CircularProgress />
-            <Typography sx={{ ml: 2 }}>Memuat data kelas...</Typography>
-        </Container>
-    );
+    if (isLoading && !kelas) { // Only show full page loader if initial class data is loading
+        return (
+            <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+                <CircularProgress />
+                <Typography sx={{ ml: 2 }}>Memuat data kelas...</Typography>
+            </Container>
+        );
+    }
+
+    if (!kelas) {
+        return <Typography sx={{ mt: 4, ml: 4 }}>Kelas tidak ditemukan.</Typography>;
+    }
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Box sx={{ mb: 3 }}>
-                <RouterLink to={`/kelas/${kelas.id}`} style={{ textDecoration: 'none' }}>
+                {/* PERBAIKAN: Tombol kembali sekarang menuju ke ClassListPage */}
+                <RouterLink to={`/kelas`} style={{ textDecoration: 'none' }}>
                     <Button variant="outlined" startIcon={<InfoOutlinedIcon />}>
                         Kembali ke Detail Kelas
                     </Button>
                 </RouterLink>
-                <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}>
-                    Manajemen Siswa: {kelas.nama_kelas}
-                </Typography>
-                <Typography variant="subtitle1" color="text.secondary">
-                    {kelas.mata_pelajaran} ({kelas.jenjang})
-                </Typography>
             </Box>
 
-            <Grid container spacing={3}>
-                {/* Kolom Kiri: Form Tambah Siswa (Manual) */}
-                <Grid item xs={12} md={4}>
-                    <Paper elevation={3} sx={{ p: 3, height: '100%' }}>
-                        <Typography variant="h5" component="h2" gutterBottom>
-                            Tambah Siswa Baru (Manual)
-                        </Typography>
-                        <Box component="form" onSubmit={handleTambahSiswa} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <TextField
-                                fullWidth
-                                label="Nama Lengkap"
-                                name="nama_lengkap"
-                                value={formSiswa.nama_lengkap}
-                                onChange={handleFormSiswaChange}
-                                required
-                            />
-                            <TextField
-                                fullWidth
-                                label="NISN"
-                                name="nisn"
-                                value={formSiswa.nisn}
-                                onChange={handleFormSiswaChange}
-                                required
-                            />
-                            <TextField
-                                fullWidth
-                                label="NIS"
-                                name="nis"
-                                value={formSiswa.nis}
-                                onChange={handleFormSiswaChange}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Tempat Lahir"
-                                name="tempat_lahir"
-                                value={formSiswa.tempat_lahir}
-                                onChange={handleFormSiswaChange}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Tanggal Lahir"
-                                type="date"
-                                name="tanggal_lahir"
-                                value={formSiswa.tanggal_lahir}
-                                onChange={handleFormSiswaChange}
-                                InputLabelProps={{ shrink: true }}
-                            />
-                            <FormControl fullWidth>
-                                <InputLabel>Jenis Kelamin</InputLabel>
-                                <Select
-                                    name="jenis_kelamin"
-                                    value={formSiswa.jenis_kelamin}
-                                    label="Jenis Kelamin"
-                                    onChange={handleFormSiswaChange}
-                                >
-                                    <MenuItem value="Laki-laki">Laki-laki</MenuItem>
-                                    <MenuItem value="Perempuan">Perempuan</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl fullWidth>
-                                <InputLabel>Agama</InputLabel>
-                                <Select
-                                    name="agama"
-                                    value={formSiswa.agama}
-                                    label="Agama"
-                                    onChange={handleFormSiswaChange}
-                                >
-                                    <MenuItem value="Islam">Islam</MenuItem>
-                                    <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
-                                    <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
-                                    <MenuItem value="Hindu">Hindu</MenuItem>
-                                    <MenuItem value="Buddha">Buddha</MenuItem>
-                                    <MenuItem value="Konghucu">Konghucu</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <TextField
-                                fullWidth
-                                label="Alamat Lengkap"
-                                name="alamat"
-                                multiline
-                                rows={3}
-                                value={formSiswa.alamat}
-                                onChange={handleFormSiswaChange}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Nomor HP Siswa"
-                                name="nomor_hp"
-                                value={formSiswa.nomor_hp}
-                                onChange={handleFormSiswaChange}
-                            />
-                            <Button type="submit" variant="contained" disabled={isLoading}>
-                                {isLoading ? <CircularProgress size={24} /> : 'Tambahkan Siswa'}
-                            </Button>
-                        </Box>
-                    </Paper>
+            <Typography variant="h4" component="h1" gutterBottom>
+                Manajemen Siswa: {kelas.nama_kelas}
+            </Typography>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+                {kelas.mata_pelajaran} ({kelas.jenjang})
+            </Typography>
+
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={() => setFormSiswa(initialFormState)} // Reset form before opening
+                        // onClick={() => setOpenAddDialog(true)} // Jika ingin menggunakan dialog
+                        fullWidth
+                    >
+                        Tambah Siswa Baru (Manual)
+                    </Button>
                 </Grid>
-
-                {/* Kolom Kanan: Daftar Siswa & Upload Excel */}
-                <Grid item xs={12} md={8}>
-                    <Paper elevation={3} sx={{ p: 3, height: '100%' }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                            <Typography variant="h5" component="h2">
-                                Daftar Siswa di Kelas Ini ({daftarSiswa.length} siswa)
-                            </Typography>
-                            <Input
-                                type="file"
-                                accept=".xlsx, .xls"
-                                onChange={handleFileUpload}
-                                sx={{ display: 'none' }}
-                                id="excel-upload-button"
-                            />
-                            <label htmlFor="excel-upload-button">
-                                <Button
-                                    variant="outlined"
-                                    component="span"
-                                    startIcon={<UploadFileIcon />}
-                                    disabled={isUploading || isLoading}
-                                >
-                                    {isUploading ? <CircularProgress size={24} /> : 'Unggah Siswa via Excel'}
-                                </Button>
-                            </label>
-                        </Box>
-
-                        {isLoading && daftarSiswa.length === 0 ? ( // Display loader only if initial list is empty
-                            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
-                                <CircularProgress />
-                            </Box>
-                        ) : daftarSiswa.length === 0 ? (
-                            <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 3 }}>
-                                Belum ada siswa di kelas ini.
-                            </Typography>
-                        ) : (
-                            <TableContainer>
-                                <Table>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>No.</TableCell>
-                                            <TableCell>Nama Lengkap</TableCell>
-                                            <TableCell>NISN</TableCell>
-                                            <TableCell>Jenis Kelamin</TableCell>
-                                            <TableCell>Aksi</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {daftarSiswa.map((siswa, index) => (
-                                            <TableRow key={siswa.id}>
-                                                <TableCell>{index + 1}</TableCell>
-                                                <TableCell>{siswa.nama_lengkap}</TableCell>
-                                                <TableCell>{siswa.nisn || 'N/A'}</TableCell>
-                                                <TableCell>{siswa.jenis_kelamin}</TableCell>
-                                                <TableCell>
-                                                    <IconButton color="primary" onClick={() => bukaModalEdit(siswa)}>
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                    <IconButton color="error" onClick={() => handleHapusSiswa(siswa.id, siswa.nama_lengkap)}>
-                                                        <DeleteIcon />
-                                                    </IconButton>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        )}
-                    </Paper>
+                <Grid item xs={12} sm={6}>
+                    <Button
+                        variant="contained"
+                        startIcon={<UploadFileIcon />}
+                        onClick={handleOpenUploadDialog}
+                        fullWidth
+                    >
+                        Import Siswa (Excel)
+                    </Button>
                 </Grid>
             </Grid>
+
+            {/* Form Tambah Siswa Manual (jika tidak pakai dialog terpisah) */}
+            <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                    Tambah Siswa Baru (Manual)
+                </Typography>
+                <Box component="form" onSubmit={handleTambahSiswa} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <TextField
+                        fullWidth
+                        label="Nama Lengkap"
+                        name="nama_lengkap"
+                        value={formSiswa.nama_lengkap}
+                        onChange={handleFormSiswaChange}
+                        required
+                    />
+                    <TextField
+                        fullWidth
+                        label="NISN"
+                        name="nisn"
+                        value={formSiswa.nisn}
+                        onChange={handleFormSiswaChange}
+                        required
+                    />
+                    <TextField
+                        fullWidth
+                        label="NIS"
+                        name="nis"
+                        value={formSiswa.nis}
+                        onChange={handleFormSiswaChange}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Tempat Lahir"
+                        name="tempat_lahir"
+                        value={formSiswa.tempat_lahir}
+                        onChange={handleFormSiswaChange}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Tanggal Lahir"
+                        type="date"
+                        name="tanggal_lahir"
+                        value={formSiswa.tanggal_lahir}
+                        onChange={handleFormSiswaChange}
+                        InputLabelProps={{ shrink: true }}
+                    />
+                    <FormControl fullWidth>
+                        <InputLabel>Jenis Kelamin</InputLabel>
+                        <Select
+                            name="jenis_kelamin"
+                            value={formSiswa.jenis_kelamin}
+                            label="Jenis Kelamin"
+                            onChange={handleFormSiswaChange}
+                        >
+                            <MenuItem value="Laki-laki">Laki-laki</MenuItem>
+                            <MenuItem value="Perempuan">Perempuan</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <FormControl fullWidth>
+                        <InputLabel>Agama</InputLabel>
+                        <Select
+                            name="agama"
+                            value={formSiswa.agama}
+                            label="Agama"
+                            onChange={handleFormSiswaChange}
+                        >
+                            <MenuItem value="Islam">Islam</MenuItem>
+                            <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
+                            <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
+                            <MenuItem value="Hindu">Hindu</MenuItem>
+                            <MenuItem value="Buddha">Buddha</MenuItem>
+                            <MenuItem value="Konghucu">Konghucu</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <TextField
+                        fullWidth
+                        label="Alamat Lengkap"
+                        name="alamat"
+                        multiline
+                        rows={3}
+                        value={formSiswa.alamat}
+                        onChange={handleFormSiswaChange}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Nomor HP Siswa"
+                        name="nomor_hp"
+                        value={formSiswa.nomor_hp}
+                        onChange={handleFormSiswaChange}
+                    />
+                    <Button type="submit" variant="contained" disabled={isLoading}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Tambahkan Siswa'}
+                    </Button>
+                </Box>
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                    Daftar Siswa di Kelas Ini ({daftarSiswa.length} siswa)
+                </Typography>
+                {isLoading && daftarSiswa.length === 0 ? ( // Display loader only if initial list is empty
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                        <CircularProgress />
+                    </Box>
+                ) : daftarSiswa.length === 0 ? (
+                    <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 3 }}>
+                        Belum ada siswa di kelas ini.
+                    </Typography>
+                ) : (
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>No.</TableCell>
+                                    <TableCell>Nama Lengkap</TableCell>
+                                    <TableCell>NISN</TableCell>
+                                    <TableCell>Jenis Kelamin</TableCell>
+                                    <TableCell>Aksi</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {daftarSiswa.map((siswa, index) => (
+                                    <TableRow key={siswa.id}>
+                                        <TableCell>{index + 1}</TableCell>
+                                        <TableCell>{siswa.nama_lengkap}</TableCell>
+                                        <TableCell>{siswa.nisn || 'N/A'}</TableCell>
+                                        <TableCell>{siswa.jenis_kelamin}</TableCell>
+                                        <TableCell>
+                                            <IconButton color="primary" onClick={() => bukaModalEdit(siswa)}>
+                                                <EditIcon />
+                                            </IconButton>
+                                            <IconButton color="error" onClick={() => handleHapusSiswa(siswa.id, siswa.nama_lengkap)}>
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </Paper>
 
             {/* Dialog untuk Edit Siswa */}
             <Dialog open={editModalOpen} onClose={tutupModalEdit}>

@@ -53,7 +53,7 @@ function App() {
               <Route element={<ProtectedRoute />}>
                 {/* Rute untuk semua peran yang sudah login (Guru, Admin, dll.) */}
                 <Route path="/kelas" element={<ClassListPage />} />
-                {/* PERBAIKAN: Rute /kelas/:id sekarang langsung ke StudentManagementPage */}
+                {/* PERBAIKAN: Rute /kelas/:id sekarang langsung ke StudentManagementPage lagi */}
                 <Route path="/kelas/:id" element={<StudentManagementPage />} /> 
                 <Route path="/kelas/:id/absensi" element={<AttendancePage />} /> {/* Rute Absensi tetap konsisten */}
                 
