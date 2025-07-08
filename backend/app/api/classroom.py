@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, jsonify
 from datetime import date
-from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole
+from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa
 from app import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.api.auth import roles_required
@@ -13,7 +13,7 @@ bp = Blueprint('classroom_api', __name__, url_prefix='/api')
 # --- FUNGSI UNTUK KELAS ---
 @bp.route('/kelas', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def tambah_kelas():
     data = request.get_json()
     if not data or not all(k in data for k in ['nama_kelas', 'jenjang', 'mata_pelajaran', 'tahun_ajaran']):
@@ -50,7 +50,6 @@ def lihat_semua_kelas():
 def lihat_satu_kelas(id_kelas):
     kelas = Kelas.query.get_or_404(id_kelas)
     siswa_di_kelas = []
-    # Mengambil siswa yang terdaftar di kelas ini melalui tabel asosiasi
     for siswa_obj in kelas.siswa:
         siswa_di_kelas.append({
             'id': siswa_obj.id,
@@ -77,17 +76,16 @@ def lihat_satu_kelas(id_kelas):
 # --- FUNGSI UNTUK SISWA ---
 @bp.route('/siswa', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def tambah_siswa():
     data = request.get_json()
     if not data or not 'nama_lengkap' in data:
         return jsonify({'message': 'Nama lengkap siswa dibutuhkan'}), 400
 
-    # Cek duplikasi NISN
     if data.get('nisn'):
         existing_siswa = Siswa.query.filter_by(nisn=data['nisn']).first()
         if existing_siswa:
-            return jsonify({'message': f"Siswa dengan NISN {data['nisn']} sudah ada."}), 409 # Conflict
+            return jsonify({'message': f"Siswa dengan NISN {data['nisn']} sudah ada."}), 409
 
     siswa_baru = Siswa(
         nama_lengkap=data.get('nama_lengkap'),
@@ -107,7 +105,7 @@ def tambah_siswa():
 
 @bp.route('/kelas/<int:id_kelas>/daftarkan_siswa', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def daftarkan_siswa(id_kelas):
     data = request.get_json()
     if not data or not 'id_siswa' in data:
@@ -116,15 +114,14 @@ def daftarkan_siswa(id_kelas):
     kelas = Kelas.query.get_or_404(id_kelas)
     siswa = Siswa.query.get_or_404(data['id_siswa'])
 
-    # Pastikan siswa belum terdaftar di kelas ini
     if siswa in kelas.siswa:
-        return jsonify({'message': f'Siswa {siswa.nama_lengkap} sudah terdaftar di kelas {kelas.nama_kelas}.'}), 409 # Conflict
+        return jsonify({'message': f'Siswa {siswa.nama_lengkap} sudah terdaftar di kelas {kelas.nama_kelas}.'}), 409
         
     kelas.siswa.append(siswa)
     db.session.commit()
     return jsonify({'message': f'Siswa {siswa.nama_lengkap} berhasil didaftarkan ke kelas {kelas.nama_kelas}!'})
 
-# --- NEW: FUNGSI UNTUK BULK IMPORT SISWA ---
+# --- FUNGSI UNTUK BULK IMPORT SISWA ---
 @bp.route('/kelas/<int:kelas_id>/siswa/bulk-import', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
@@ -137,37 +134,25 @@ def bulk_import_siswa(kelas_id):
     fail_count = 0
     errors = []
     
-    # Set untuk melacak NISN dan asosiasi yang sudah diproses dalam batch ini
-    # Ini mencegah duplikasi dalam file Excel yang sama
     processed_nisns_in_batch = set() 
     
-    # Tidak perlu processed_associations_in_batch secara eksplisit jika kita mengandalkan kelas.siswa
-    # Tapi kita akan me-refresh kelas setiap iterasi.
+    main_kelas_obj = db.session.query(Kelas).get(kelas_id)
+    if not main_kelas_obj:
+        return jsonify({"message": f"Kelas dengan ID {kelas_id} tidak ditemukan."}), 404
 
     for student_data in students_data:
-        # Gunakan sub-transaksi (savepoint) untuk setiap siswa untuk isolasi error
         sub_transaction = db.session.begin_nested() 
 
         try:
-            # Pastikan objek kelas selalu segar di setiap iterasi
-            # Ini penting karena commit di iterasi sebelumnya bisa membuat objek 'kelas' jadi stale
-            kelas = db.session.query(Kelas).get(kelas_id)
-            if not kelas: # Fallback jika kelas tidak ditemukan (harusnya sudah ditangani di atas)
+            nama_lengkap = student_data.get('nama_lengkap')
+            current_nisn = student_data.get('nisn')
+
+            if not nama_lengkap or not current_nisn:
                 fail_count += 1
-                errors.append(f"Kelas dengan ID {kelas_id} tidak ditemukan.")
+                errors.append(f"Data siswa tidak lengkap (Nama Lengkap: {nama_lengkap or 'N/A'}, NISN: {current_nisn or 'N/A'}), dilewati.")
                 sub_transaction.rollback()
                 continue
 
-            # Basic validation for required fields
-            if not student_data.get('nama_lengkap') or not student_data.get('nisn'):
-                fail_count += 1
-                errors.append(f"Data siswa tidak lengkap (Nama Lengkap/NISN kosong): {student_data.get('nama_lengkap', 'N/A')}")
-                sub_transaction.rollback()
-                continue
-
-            current_nisn = student_data['nisn']
-
-            # 1. Cek duplikasi NISN dalam file Excel batch ini
             if current_nisn in processed_nisns_in_batch:
                 fail_count += 1
                 errors.append(f"Siswa dengan NISN {current_nisn} adalah duplikat di file Excel ini, dilewati.")
@@ -176,69 +161,76 @@ def bulk_import_siswa(kelas_id):
 
             siswa_obj = None
             
-            # 2. Cek apakah siswa dengan NISN ini sudah ada di tabel Siswa (secara global)
             existing_siswa_global = Siswa.query.filter_by(nisn=current_nisn).first()
 
             if existing_siswa_global:
                 siswa_obj = existing_siswa_global
-                # Refresh objek siswa dari database untuk memastikan status terbarunya di session
-                db.session.refresh(siswa_obj) 
                 
-                # 3. Jika siswa sudah ada secara global, cek apakah dia sudah terdaftar di kelas ini
-                # Menggunakan hubungan kelas.siswa yang sudah di-refresh
-                if siswa_obj in kelas.siswa: # Gunakan pengecekan relationship langsung
+                # PENTING: Refresh objek kelas utama untuk memastikan relasinya mutakhir.
+                # Ini akan memuat ulang status terbaru dari database, termasuk siswa
+                # yang ditambahkan di sub-transaksi sebelumnya dalam batch ini.
+                db.session.refresh(main_kelas_obj)
+
+                # Sekarang, periksa apakah siswa sudah ada di koleksi yang dimuat ulang.
+                # Ini seharusnya secara akurat mencerminkan siswa yang ditambahkan di iterasi sebelumnya.
+                if siswa_obj in main_kelas_obj.siswa:
                     fail_count += 1
                     errors.append(f"Siswa {siswa_obj.nama_lengkap} (NISN: {siswa_obj.nisn}) sudah terdaftar di kelas ini, dilewati.")
                     sub_transaction.rollback()
-                    continue # Lewati siswa ini
-                # Jika siswa ada secara global tapi BELUM di kelas ini, lanjutkan untuk mendaftarkannya
+                    continue
             else:
-                # Siswa TIDAK ada secara global, buat objek siswa baru
+                try:
+                    tanggal_lahir_str = student_data.get('tanggal_lahir')
+                    tanggal_lahir_obj = None
+                    if tanggal_lahir_str:
+                        tanggal_lahir_obj = date.fromisoformat(tanggal_lahir_str)
+                except ValueError:
+                    fail_count += 1
+                    errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena format Tanggal Lahir salah: '{tanggal_lahir_str or 'kosong'}' (harus YYYY-MM-DD).")
+                    sub_transaction.rollback()
+                    continue
+
                 siswa_obj = Siswa(
-                    nama_lengkap=student_data.get('nama_lengkap'),
-                    nisn=student_data.get('nisn'),
+                    nama_lengkap=nama_lengkap,
+                    nisn=current_nisn,
                     nis=student_data.get('nis'),
                     tempat_lahir=student_data.get('tempat_lahir'),
-                    tanggal_lahir=date.fromisoformat(student_data['tanggal_lahir']) if student_data.get('tanggal_lahir') else None,
+                    tanggal_lahir=tanggal_lahir_obj,
                     jenis_kelamin=student_data.get('jenis_kelamin'),
                     agama=student_data.get('agama'),
                     alamat=student_data.get('alamat'),
                     nomor_hp=student_data.get('nomor_hp')
                 )
-                db.session.add(siswa_obj) # Tambahkan siswa baru ke session
-                db.session.flush() # Penting: Flush untuk mendapatkan ID siswa baru sebelum membuat asosiasi
+                db.session.add(siswa_obj) 
+                db.session.flush()
             
-            # 4. Tambahkan siswa ke hubungan kelas.siswa
-            # Langkah ini hanya tercapai jika siswa perlu diasosiasikan (baik baru atau sudah ada tapi belum terdaftar di kelas ini)
-            kelas.siswa.append(siswa_obj)
+            # Baris ini hanya akan dicapai jika siswa baru atau sudah ada tetapi belum terdaftar.
+            main_kelas_obj.siswa.append(siswa_obj)
             
-            # Commit savepoint untuk mengaplikasikan perubahan siswa ini ke database
             sub_transaction.commit() 
             
             success_count += 1
-            # Tambahkan ke set yang sudah diproses dalam batch
             processed_nisns_in_batch.add(current_nisn)
 
         except IntegrityError as ie:
-            # Menangani error integritas database (misalnya, duplikasi NISN karena UNIQUE constraint, atau duplikasi asosiasi)
-            db.session.rollback(sub_transaction) # Rollback savepoint
+            sub_transaction.rollback() 
             fail_count += 1
-            # Pesan error yang lebih spesifik untuk IntegrityError
-            if "UNIQUE constraint failed: siswa.nisn" in str(ie):
-                 errors.append(f"Gagal impor siswa '{student_data.get('nama_lengkap', 'N/A')}' (NISN: {student_data.get('nisn', 'N/A')}) karena NISN sudah terdaftar di sistem.")
-            elif "UNIQUE constraint failed: kelas_siswa.kelas_id, kelas_siswa.siswa_id" in str(ie):
-                errors.append(f"Gagal impor siswa '{student_data.get('nama_lengkap', 'N/A')}' (NISN: {student_data.get('nisn', 'N/A')}) karena sudah terdaftar di kelas ini.")
+            error_message = str(ie.orig) if hasattr(ie, 'orig') else str(ie)
+            
+            if "UNIQUE constraint failed: siswa.nisn" in error_message or ("Duplicate entry" in error_message and "for key 'nisn'" in error_message):
+                 errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena NISN sudah terdaftar di sistem.")
+            elif "UNIQUE constraint failed: kelas_siswa.kelas_id, kelas_siswa.siswa_id" in error_message:
+                errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena sudah terdaftar di kelas ini.")
             else:
-                errors.append(f"Gagal mengimpor siswa '{student_data.get('nama_lengkap', 'N/A')}' (NISN: {student_data.get('nisn', 'N/A')}) karena masalah integritas database: {str(ie)}")
-        except ValueError as ve: 
-            sub_transaction.rollback() # Rollback savepoint
+                errors.append(f"Gagal mengimpor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena masalah integritas database: {error_message}")
+            print(f"IntegrityError importing student {nama_lengkap} (NISN: {current_nisn}): {error_message}")
+        except Exception as e: 
+            sub_transaction.rollback()
             fail_count += 1
-            errors.append(f"Gagal mengimpor siswa '{student_data.get('nama_lengkap', 'N/A')}' (NISN: {student_data.get('nisn', 'N/A')}) karena format tanggal salah: {str(ve)}")
-        except Exception as e: # Menangkap error lain yang tidak terduga
-            sub_transaction.rollback() # Rollback savepoint
-            fail_count += 1
-            errors.append(f"Gagal mengimpor siswa '{student_data.get('nama_lengkap', 'N/A')}' (NISN: {student_data.get('nisn', 'N/A')}): {str(e)}")
-            print(f"Error importing student {student_data.get('nama_lengkap')}: {e}")
+            errors.append(f"Gagal mengimpor siswa '{nama_lengkap}' (NISN: {current_nisn}): {str(e)}")
+            print(f"General Error importing student {nama_lengkap}: {e}")
+
+    db.session.commit()
 
     return jsonify({
         "message": f"Proses impor selesai: {success_count} siswa berhasil, {fail_count} gagal atau dilewati.",
@@ -247,11 +239,10 @@ def bulk_import_siswa(kelas_id):
         "errors": errors
     }), 200
 
-
 # --- FUNGSI UNTUK ABSENSI ---
 @bp.route('/kelas/<int:id_kelas>/absensi', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def catat_absensi(id_kelas):
     data = request.get_json()
     if not data or not 'kehadiran' in data:
@@ -260,7 +251,6 @@ def catat_absensi(id_kelas):
     
     try:
         for absensi_siswa in data['kehadiran']:
-            # Hapus catatan absensi yang sudah ada untuk tanggal dan siswa ini
             Absensi.query.filter_by(
                 tanggal=tanggal_absensi,
                 siswa_id=absensi_siswa['id_siswa'],
@@ -285,7 +275,7 @@ def catat_absensi(id_kelas):
 # --- PERBAIKAN LOGIKA PENGAMBILAN DATA ABSENSI ---
 @bp.route('/kelas/<int:id_kelas>/absensi', methods=['GET'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_absensi(id_kelas):
     tanggal_str = request.args.get('tanggal', date.today().isoformat())
     
@@ -294,7 +284,6 @@ def lihat_absensi(id_kelas):
     except ValueError:
         return jsonify({'message': 'Format tanggal tidak valid. Gunakan YYYY-MM-DD.'}), 400
     
-    # Query yang benar untuk mengambil data absensi beserta nama siswa
     catatan_absensi = db.session.query(Absensi, Siswa.nama_lengkap).join(
         Siswa, Absensi.siswa_id == Siswa.id
     ).filter(
@@ -312,12 +301,11 @@ def lihat_absensi(id_kelas):
 
 @bp.route('/siswa/<int:id_siswa>', methods=['PUT'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def update_siswa(id_siswa):
     siswa = Siswa.query.get_or_404(id_siswa)
     data = request.get_json()
 
-    # Cek duplikasi NISN jika NISN diubah
     if 'nisn' in data and data['nisn'] != siswa.nisn:
         existing_siswa = Siswa.query.filter_by(nisn=data['nisn']).first()
         if existing_siswa and existing_siswa.id != siswa.id:
@@ -339,11 +327,10 @@ def update_siswa(id_siswa):
 
 @bp.route('/siswa/<int:id_siswa>', methods=['DELETE'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User']) # Tambahkan 'Super User'
+@roles_required(['Admin', 'Guru', 'Super User'])
 def hapus_siswa(id_siswa):
     siswa = Siswa.query.get_or_404(id_siswa)
     
-    # Hapus juga semua data absensi yang terkait dengan siswa ini
     Absensi.query.filter_by(siswa_id=id_siswa).delete()
     
     db.session.delete(siswa)
