@@ -4,8 +4,24 @@ from flask import Blueprint, request, jsonify
 from ..models.classroom_model import User, db, UserRole
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt, get_jwt_identity 
+from functools import wraps # Tambahkan import ini
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+
+# --- Fungsi decorator baru untuk memeriksa peran pengguna ---
+def roles_required(roles):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            claims = get_jwt() # Menggunakan get_jwt() untuk mengambil semua claims
+            # Pastikan 'role' ada dalam claims dan peran pengguna ada dalam daftar peran yang diizinkan
+            if "role" not in claims or claims["role"] not in roles:
+                return jsonify({"message": "Akses tidak diizinkan: Peran tidak sesuai"}), 403
+            return fn(*args, **kwargs)
+        return decorator
+    return wrapper
+# --- Akhir fungsi decorator ---
+
 
 @bp.route('/register', methods=['POST'])
 def register():
@@ -47,10 +63,8 @@ def login():
 
     additional_claims = {'role': user.role.value}
     
-    # --- PERBAIKAN DI SINI ---
     # Ubah user.id menjadi string saat membuat token
     access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
-    # -------------------------
     
     return jsonify({
         'message': 'Login berhasil!',
@@ -60,29 +74,20 @@ def login():
 
 @bp.route('/users', methods=['GET'])
 @jwt_required()
+@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
 def get_all_users():
     """Endpoint untuk mengambil semua data pengguna (khusus Admin/Super User)."""
-    claims = get_jwt()
-    user_role = claims.get('role')
-
-    if user_role not in ['Admin', 'Super User']:
-        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
-
+    # Peran sudah diperiksa oleh decorator roles_required
     users = User.query.all()
     users_list = [user.to_dict() for user in users]
     return jsonify(users_list), 200
 
 @bp.route('/create-user', methods=['POST'])
 @jwt_required()
+@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
 def create_user():
     """Endpoint untuk membuat pengguna baru (khusus Admin/Super User)."""
-    # 1. Periksa peran pengguna yang sedang login
-    claims = get_jwt()
-    current_user_role = claims.get('role')
-    if current_user_role not in ['Admin', 'Super User']:
-        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
-
-    # 2. Ambil data dari form
+    # Peran sudah diperiksa oleh decorator roles_required
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
@@ -92,18 +97,14 @@ def create_user():
     if not all([email, password, nama_lengkap, role_str]):
         return jsonify({'error': 'Semua field harus diisi.'}), 400
 
-    # 3. Validasi peran
     try:
-        # Ubah string peran menjadi objek Enum
         role_enum = UserRole[role_str.upper().replace(" ", "_")]
     except KeyError:
         return jsonify({'error': f'Peran "{role_str}" tidak valid.'}), 400
 
-    # 4. Cek duplikasi email
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email sudah terdaftar.'}), 409
 
-    # 5. Buat dan simpan pengguna baru
     new_user = User(
         email=email,
         nama_lengkap=nama_lengkap,
@@ -118,40 +119,29 @@ def create_user():
 
 @bp.route('/users/<int:id>', methods=['GET'])
 @jwt_required()
+@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
 def get_user(id):
     """Endpoint untuk mengambil data satu pengguna berdasarkan ID."""
-    # Pastikan hanya admin yang bisa mengakses
-    claims = get_jwt()
-    current_user_role = claims.get('role')
-    if current_user_role not in ['Admin', 'Super User']:
-        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
-        
+    # Peran sudah diperiksa oleh decorator roles_required
     user = User.query.get_or_404(id)
     return jsonify(user.to_dict())
 
 @bp.route('/users/<int:user_id>', methods=['PUT'])
 @jwt_required()
+@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
 def update_user(user_id):
     """Endpoint untuk memperbarui data pengguna."""
-    claims = get_jwt()
-    current_user_role = claims.get('role')
-    if current_user_role not in ['Admin', 'Super User']:
-        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
-
+    # Peran sudah diperiksa oleh decorator roles_required
     user_to_update = User.query.get_or_404(user_id)
     data = request.get_json()
 
-    # Validasi email agar tidak duplikat dengan pengguna lain
     new_email = data.get('email')
     if new_email and new_email != user_to_update.email and User.query.filter_by(email=new_email).first():
         return jsonify({'error': 'Email sudah digunakan oleh pengguna lain.'}), 409
 
-    # --- PERBAIKAN DI SINI ---
-    # Menggunakan 'nama_lengkap' sesuai dengan model database
     user_to_update.nama_lengkap = data.get('nama_lengkap', user_to_update.nama_lengkap)
     user_to_update.email = data.get('email', user_to_update.email)
 
-    # Update peran jika ada dalam data
     if 'role' in data:
         role_str = data.get('role')
         try:
@@ -160,7 +150,6 @@ def update_user(user_id):
         except KeyError:
             return jsonify({'error': f'Peran "{role_str}" tidak valid.'}), 400
 
-    # Update password hanya jika diisi
     password = data.get('password')
     if password:
         user_to_update.set_password(password)
@@ -170,25 +159,19 @@ def update_user(user_id):
 
 @bp.route('/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
+@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
 def delete_user(user_id):
     """Endpoint untuk menghapus pengguna (khusus Admin/Super User)."""
-    # 1. Periksa peran pengguna yang sedang login
-    claims = get_jwt()
-    current_user_role = claims.get('role')
-    if current_user_role not in ['Admin', 'Super User']:
-        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
-
-    # 2. Periksa agar pengguna tidak bisa menghapus dirinya sendiri
+    # Peran sudah diperiksa oleh decorator roles_required
     current_user_id = get_jwt_identity()
-    if current_user_id == user_id:
+    # current_user_id dari get_jwt_identity() adalah string, ubah ke int
+    if int(current_user_id) == user_id:
         return jsonify({'error': 'Anda tidak dapat menghapus akun Anda sendiri.'}), 400
 
-    # 3. Cari pengguna yang akan dihapus
     user_to_delete = User.query.get(user_id)
     if not user_to_delete:
         return jsonify({'error': 'Pengguna tidak ditemukan.'}), 404
 
-    # 4. Hapus pengguna dari database
     db.session.delete(user_to_delete)
     db.session.commit()
 

@@ -1,95 +1,210 @@
 // frontend/src/api/classroomService.js
 
-const API_URL = 'http://127.0.0.1:5000/api';
+import { getAuthHeader } from './authService'; // Pastikan ini diimpor
 
-// Fungsi untuk mengambil semua data kelas
+const API_URL = 'http://localhost:5000/api'; // Sesuaikan jika API Anda berjalan di port atau domain lain
+
+// --- Kelas ---
 export const getKelas = async () => {
-    const response = await fetch(`${API_URL}/kelas`);
-    if (!response.ok) {
-        throw new Error('Gagal mengambil data kelas');
+    try {
+        const response = await fetch(`${API_URL}/kelas`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat kelas');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching classes:", error);
+        throw error;
     }
-    return response.json();
 };
 
-// Fungsi untuk mengirim data kelas baru
-export const tambahKelas = async (dataKelas) => {
-    const response = await fetch(`${API_URL}/kelas`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dataKelas),
-    });
-    if (!response.ok) {
-        throw new Error('Gagal menambahkan kelas');
+export const tambahKelas = async (kelasData) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(kelasData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menambah kelas');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error adding class:", error);
+        throw error;
     }
-    return response.json();
-};
-
-export const tambahSiswa = async (dataSiswa) => {
-    const response = await fetch(`${API_URL}/siswa`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataSiswa),
-    });
-    if (!response.ok) throw new Error('Gagal menambah siswa');
-    return response.json();
-};
-
-// Fungsi untuk mendaftarkan siswa ke kelas
-export const daftarkanSiswaKeKelas = async (idKelas, idSiswa) => {
-    const response = await fetch(`${API_URL}/kelas/${idKelas}/daftarkan_siswa`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_siswa: idSiswa }),
-    });
-    if (!response.ok) throw new Error('Gagal mendaftarkan siswa');
-    return response.json();
 };
 
 export const getKelasDetail = async (idKelas) => {
-    const response = await fetch(`${API_URL}/kelas/${idKelas}`);
-    if (!response.ok) {
-        throw new Error('Gagal mengambil detail kelas');
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat detail kelas');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching class detail:", error);
+        throw error;
     }
-    return response.json();
 };
 
-export const catatAbsensi = async (idKelas, dataAbsensi) => {
-    const response = await fetch(`${API_URL}/kelas/${idKelas}/absensi`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataAbsensi),
-    });
-    if (!response.ok) {
-        throw new Error('Gagal mencatat absensi');
+// --- Siswa ---
+export const tambahSiswa = async (siswaData) => {
+    try {
+        const response = await fetch(`${API_URL}/siswa`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(siswaData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menambah siswa');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error adding student:", error);
+        throw error;
     }
-    return response.json();
 };
 
-export const getAbsensi = async (idKelas, tanggal) => {
-    // Mengirim tanggal sebagai query parameter
-    const response = await fetch(`${API_URL}/kelas/${idKelas}/absensi?tanggal=${tanggal}`);
-    if (!response.ok) {
-        throw new Error('Gagal mengambil data absensi');
+export const daftarkanSiswaKeKelas = async (idKelas, idSiswa) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}/daftarkan_siswa`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify({ id_siswa: idSiswa })
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal mendaftarkan siswa ke kelas');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error enrolling student to class:", error);
+        throw error;
     }
-    return response.json();
 };
 
-export const updateSiswa = async (idSiswa, dataSiswa) => {
-    const response = await fetch(`${API_URL}/siswa/${idSiswa}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataSiswa),
-    });
-    if (!response.ok) throw new Error('Gagal memperbarui data siswa');
-    return response.json();
+export const updateSiswa = async (idSiswa, siswaData) => {
+    try {
+        const response = await fetch(`${API_URL}/siswa/${idSiswa}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(siswaData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memperbarui siswa');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error updating student:", error);
+        throw error;
+    }
 };
 
 export const deleteSiswa = async (idSiswa) => {
-    const response = await fetch(`${API_URL}/siswa/${idSiswa}`, {
-        method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Gagal menghapus siswa');
-    return response.json();
+    try {
+        const response = await fetch(`${API_URL}/siswa/${idSiswa}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menghapus siswa');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error deleting student:", error);
+        throw error;
+    }
+};
+
+// --- Absensi ---
+export const catatAbsensi = async (idKelas, absensiData) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}/absensi`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(absensiData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal mencatat absensi');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error recording attendance:", error);
+        throw error;
+    }
+};
+
+export const getAbsensi = async (idKelas, tanggal) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}/absensi?tanggal=${tanggal}`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat absensi');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching attendance:", error);
+        throw error;
+    }
+};
+
+// --- NEW: BULK IMPORT SISWA ---
+export const bulkImportSiswa = async (kelasId, studentsData) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${kelasId}/siswa/bulk-import`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(studentsData)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            // Handle specific backend error messages
+            throw new Error(data.message || 'Gagal mengimpor siswa massal');
+        }
+        return data; // Mengembalikan pesan sukses, success_count, fail_count, dll.
+    } catch (error) {
+        console.error("Error bulk importing students:", error);
+        throw error;
+    }
 };

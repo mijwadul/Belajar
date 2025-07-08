@@ -1,12 +1,17 @@
 // frontend/src/pages/AttendancePage.jsx
 
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link as RouterLink } from 'react-router-dom'; // Menggunakan RouterLink
 import { getKelasDetail, catatAbsensi, getAbsensi } from '../api/classroomService';
-import Modal from 'react-modal';
 import { utils, writeFile } from 'xlsx';
 
-Modal.setAppElement('#root');
+import {
+    Container, Box, Typography, Button, CircularProgress, Alert, Snackbar,
+    Table, TableContainer, TableHead, TableBody, TableRow, TableCell,
+    Dialog, DialogTitle, DialogContent, DialogActions, TextField, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, Paper // Import Paper
+} from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
 function AttendancePage() {
     const { id } = useParams();
@@ -16,25 +21,52 @@ function AttendancePage() {
     const [tanggalLihat, setTanggalLihat] = useState(new Date().toISOString().split('T')[0]);
     const [riwayatAbsensi, setRiwayatAbsensi] = useState([]);
     const [pesanRiwayat, setPesanRiwayat] = useState("Pilih tanggal dan klik tampilkan.");
-    const [modalIsOpen, setModalIsOpen] = useState(false);
+    
+    // State for Material-UI Dialog
+    const [modalIsOpen, setModalIsOpen] = useState(false); // Mengganti nama state agar tetap sama fungsinya
+    
+    // State for Snackbar Notifications
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+    const [isLoading, setIsLoading] = useState(false); // Untuk loading umum
 
     useEffect(() => {
         const muatData = async () => {
+            setIsLoading(true);
             try {
                 const detail = await getKelasDetail(id);
                 setKelas(detail);
                 setSiswaList(detail.siswa);
             } catch (error) {
                 console.error("Gagal memuat data:", error);
+                showSnackbar('Gagal memuat data kelas.', 'error');
+            } finally {
+                setIsLoading(false);
             }
         };
         muatData();
     }, [id]);
 
+    const showSnackbar = (message, severity) => {
+        setSnackbarMessage(message);
+        setSnackbarSeverity(severity);
+        setSnackbarOpen(true);
+    };
+
+    const handleCloseSnackbar = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
+
     const bukaModalAbsensi = () => {
         const initialKehadiran = {};
         siswaList.forEach(siswa => {
-            initialKehadiran[siswa.id] = 'Hadir';
+            // Coba ambil status dari riwayat jika sudah ada untuk tanggal yang dipilih
+            const statusDariRiwayat = riwayatAbsensi.find(item => item.nama_siswa === siswa.nama_lengkap)?.status;
+            initialKehadiran[siswa.id] = statusDariRiwayat || 'Hadir'; // Default 'Hadir' jika belum ada
         });
         setKehadiran(initialKehadiran);
         setModalIsOpen(true);
@@ -47,120 +79,223 @@ function AttendancePage() {
     };
 
     const handleSubmitAbsensi = async () => {
+        setIsLoading(true);
         const dataUntukDikirim = {
             kehadiran: Object.entries(kehadiran).map(([id_siswa, status]) => ({
                 id_siswa: parseInt(id_siswa),
                 status: status
-            }))
+            })),
+            tanggal: tanggalLihat // Mengirim tanggal yang sedang dilihat
         };
         
         try {
             await catatAbsensi(id, dataUntukDikirim);
-            alert('Absensi berhasil disimpan!');
+            showSnackbar('Absensi berhasil disimpan!', 'success');
             tutupModalAbsensi();
+            handleLihatAbsensi(); // Perbarui riwayat setelah menyimpan
         } catch (error) {
             console.error(error);
-            alert('Gagal menyimpan absensi.');
+            showSnackbar('Gagal menyimpan absensi.', 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleLihatAbsensi = async () => {
+        setIsLoading(true);
         try {
             const data = await getAbsensi(id, tanggalLihat);
             setRiwayatAbsensi(data);
-            setPesanRiwayat(data.length === 0 ? "Tidak ada data untuk tanggal ini." : "");
+            setPesanRiwayat(data.length === 0 ? "Tidak ada data absensi untuk tanggal ini." : "");
         } catch (error) {
             console.error("Gagal memuat riwayat:", error);
             setRiwayatAbsensi([]);
-            setPesanRiwayat("Gagal memuat data.");
+            setPesanRiwayat("Gagal memuat data riwayat.");
+            showSnackbar('Gagal memuat riwayat absensi.', 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleUnduhAbsensi = () => {
         if (riwayatAbsensi.length === 0) {
-            alert("Tidak ada data untuk diunduh. Silakan tampilkan riwayat terlebih dahulu.");
+            showSnackbar("Tidak ada data untuk diunduh. Silakan tampilkan riwayat terlebih dahulu.", "warning");
             return;
         }
 
-        // --- PERUBAHAN DI SINI ---
-        // 1. Format tanggal menjadi lebih mudah dibaca
         const tanggalTerformat = new Date(tanggalLihat).toLocaleDateString('id-ID', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
         });
 
-        // 2. Tambahkan kolom "Tanggal" pada setiap baris data
         const dataUntukExcel = riwayatAbsensi.map((item, index) => ({
             'No.': index + 1,
-            'Tanggal': tanggalTerformat, // Tambahkan tanggal yang sudah diformat
+            'Tanggal': tanggalTerformat,
             'Nama Siswa': item.nama_siswa,
             'Status Kehadiran': item.status
         }));
-        // -------------------------
         
         const worksheet = utils.json_to_sheet(dataUntukExcel);
         const workbook = utils.book_new();
         utils.book_append_sheet(workbook, worksheet, "Absensi");
         
         writeFile(workbook, `Absensi_${kelas.nama_kelas}_${tanggalLihat}.xlsx`);
+        showSnackbar('Riwayat absensi berhasil diunduh!', 'success');
     };
 
+    if (isLoading && !kelas) { // Only show full page loader if initial class data is loading
+        return (
+            <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+                <CircularProgress />
+                <Typography sx={{ ml: 2 }}>Memuat data kelas...</Typography>
+            </Container>
+        );
+    }
+
     if (!kelas) {
-        return <p>Memuat...</p>;
+        return <Typography sx={{ mt: 4, ml: 4 }}>Kelas tidak ditemukan.</Typography>;
     }
 
     return (
-        <div style={{ padding: '20px' }}>
-            <Link to="/">&larr; Kembali ke Daftar Kelas</Link>
-            <h1>Absensi Kelas: {kelas.nama_kelas}</h1>
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            <Box sx={{ mb: 3 }}>
+                <RouterLink to={`/kelas/${kelas.id}`} style={{ textDecoration: 'none' }}>
+                    <Button variant="outlined" startIcon={<ArrowBackIcon />}>
+                        Kembali ke Detail Kelas
+                    </Button>
+                </RouterLink>
+                <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}>
+                    Absensi Kelas: {kelas.nama_kelas}
+                </Typography>
+                <Typography variant="subtitle1" color="text.secondary">
+                    {kelas.mata_pelajaran} ({kelas.jenjang})
+                </Typography>
+            </Box>
             
-            <button onClick={bukaModalAbsensi} disabled={siswaList.length === 0}>
-                Ambil Absensi Hari Ini
-            </button>
-            <p>{siswaList.length === 0 ? 'Tambahkan siswa terlebih dahulu untuk mengambil absensi.' : ''}</p>
+            <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+                <Button 
+                    variant="contained" 
+                    onClick={bukaModalAbsensi} 
+                    disabled={siswaList.length === 0 || isLoading}
+                >
+                    Ambil Absensi Hari Ini
+                </Button>
+                {siswaList.length === 0 && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Tambahkan siswa terlebih dahulu untuk mengambil absensi.
+                    </Typography>
+                )}
+            </Paper>
 
-            <hr />
+            <Paper elevation={3} sx={{ p: 3 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                    Lihat dan Unduh Riwayat Absensi
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                    <TextField
+                        type="date"
+                        value={tanggalLihat}
+                        onChange={(e) => setTanggalLihat(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                    />
+                    <Button variant="contained" onClick={handleLihatAbsensi} disabled={isLoading}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Tampilkan'}
+                    </Button>
+                    <Button 
+                        variant="outlined" 
+                        startIcon={<FileDownloadIcon />}
+                        onClick={handleUnduhAbsensi} 
+                        disabled={riwayatAbsensi.length === 0 || isLoading} 
+                    >
+                        Unduh Riwayat (.xlsx)
+                    </Button>
+                </Box>
 
-            <h3>Lihat dan Unduh Riwayat Absensi</h3>
-            <input type="date" value={tanggalLihat} onChange={(e) => setTanggalLihat(e.target.value)} />
-            <button onClick={handleLihatAbsensi} style={{ marginLeft: '10px' }}>Tampilkan</button>
-            <button onClick={handleUnduhAbsensi} disabled={riwayatAbsensi.length === 0} style={{ marginLeft: '10px' }}>
-                Unduh Riwayat (.xlsx)
-            </button>
+                {isLoading && riwayatAbsensi.length === 0 ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px' }}>
+                        <CircularProgress />
+                    </Box>
+                ) : riwayatAbsensi.length > 0 ? (
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>No.</TableCell>
+                                    <TableCell>Nama Siswa</TableCell>
+                                    <TableCell>Status Kehadiran</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {riwayatAbsensi.map((absensi, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell>{index + 1}</TableCell>
+                                        <TableCell>{absensi.nama_siswa}</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>{absensi.status}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                ) : (
+                    <Typography variant="body2" color="text.secondary">
+                        {pesanRiwayat}
+                    </Typography>
+                )}
+            </Paper>
 
-            {riwayatAbsensi.length > 0 ? (
-                <ul> {riwayatAbsensi.map((absensi, index) => ( <li key={index}>{absensi.nama_siswa}: <strong>{absensi.status}</strong></li> ))} </ul>
-            ) : <p>{pesanRiwayat}</p>}
+            {/* Material-UI Dialog for Absensi */}
+            <Dialog open={modalIsOpen} onClose={tutupModalAbsensi} maxWidth="md" fullWidth>
+                <DialogTitle>Absensi untuk Tanggal: {new Date(tanggalLihat).toLocaleDateString('id-ID')}</DialogTitle>
+                <DialogContent dividers>
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Nama Siswa</TableCell>
+                                    <TableCell>Status</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {siswaList.map(siswa => (
+                                    <TableRow key={siswa.id}>
+                                        <TableCell>{siswa.nama_lengkap}</TableCell>
+                                        <TableCell>
+                                            <FormControl component="fieldset">
+                                                <RadioGroup
+                                                    row
+                                                    name={`status-${siswa.id}`}
+                                                    value={kehadiran[siswa.id] || 'Hadir'}
+                                                    onChange={(e) => handleStatusChange(siswa.id, e.target.value)}
+                                                >
+                                                    <FormControlLabel value="Hadir" control={<Radio size="small" />} label="Hadir" />
+                                                    <FormControlLabel value="Sakit" control={<Radio size="small" />} label="Sakit" />
+                                                    <FormControlLabel value="Izin" control={<Radio size="small" />} label="Izin" />
+                                                    <FormControlLabel value="Alfa" control={<Radio size="small" />} label="Alfa" />
+                                                </RadioGroup>
+                                            </FormControl>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={tutupModalAbsensi} color="secondary">
+                        Batal
+                    </Button>
+                    <Button onClick={handleSubmitAbsensi} variant="contained" disabled={isLoading}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Simpan Absensi'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-            <Modal isOpen={modalIsOpen} onRequestClose={tutupModalAbsensi} contentLabel="Modal Absensi" style={{ content: { top: '50%', left: '50%', right: 'auto', bottom: 'auto', marginRight: '-50%', transform: 'translate(-50%, -50%)', width: '600px' } }}>
-                <h2>Absensi untuk Tanggal: {new Date().toLocaleDateString('id-ID')}</h2>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                        <tr>
-                            <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>Nama Siswa</th>
-                            <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {siswaList.map(siswa => (
-                            <tr key={siswa.id}>
-                                <td style={{ border: '1px solid #ccc', padding: '8px' }}>{siswa.nama_lengkap}</td>
-                                <td style={{ border: '1px solid #ccc', padding: '8px' }}>
-                                    {['Hadir', 'Sakit', 'Izin', 'Alfa'].map(status => (
-                                        <label key={status} style={{ marginRight: '15px' }}>
-                                            <input type="radio" name={`status-${siswa.id}`} value={status} checked={kehadiran[siswa.id] === status} onChange={() => handleStatusChange(siswa.id, status)} /> {status}
-                                        </label>
-                                    ))}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                    <button onClick={tutupModalAbsensi} style={{ marginRight: '10px' }}>Batal</button>
-                    <button onClick={handleSubmitAbsensi}>Simpan Absensi</button>
-                </div>
-            </Modal>
-        </div>
+            {/* Snackbar for Notifications */}
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleCloseSnackbar}>
+                <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Container>
     );
 }
 

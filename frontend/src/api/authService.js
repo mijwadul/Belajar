@@ -1,191 +1,172 @@
 // frontend/src/api/authService.js
 
-const API_URL = 'http://127.0.0.1:5000/api/auth';
+const API_URL = 'http://localhost:5000/api/auth'; // Sesuaikan jika API Anda berjalan di port atau domain lain
 
-/**
- * Fungsi bantuan untuk mendapatkan header otentikasi.
- * Mengambil token dari localStorage dan memformatnya.
- */
-const getAuthHeader = () => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        return { 'Authorization': `Bearer ${token}` };
-    }
-    return {};
+// Fungsi untuk mendapatkan token dari localStorage
+const getToken = () => {
+    return localStorage.getItem('access_token');
 };
 
-/**
- * Mendaftarkan pengguna baru (default sebagai Guru).
- * @param {object} userData - Data pengguna (nama_lengkap, email, password).
- */
+// Fungsi untuk mendapatkan Authorization header
+export const getAuthHeader = () => {
+    const token = getToken();
+    return token ? `Bearer ${token}` : '';
+};
+
+// Fungsi untuk mendaftarkan pengguna baru
 export const registerUser = async (userData) => {
-    const response = await fetch(`${API_URL}/register`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.error || 'Gagal melakukan registrasi.');
+    try {
+        const response = await fetch(`${API_URL}/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(userData),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal registrasi.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error during registration:', error);
+        throw error;
     }
-
-    return data;
 };
 
-/**
- * Melakukan login pengguna.
- * @param {object} credentials - Kredensial pengguna (email, password).
- */
+// Fungsi untuk login pengguna
 export const loginUser = async (credentials) => {
-    const response = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.error || 'Gagal melakukan login.');
+    try {
+        const response = await fetch(`${API_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(credentials),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal login.');
+        }
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user)); // Simpan info user
+        return data;
+    } catch (error) {
+        console.error('Error during login:', error);
+        throw error;
     }
-
-    // Jika berhasil, simpan token dan data user ke localStorage
-    if (data.access_token) {
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-    }
-
-    return data;
 };
 
-/**
- * Menghapus token dan data pengguna dari localStorage.
- */
+// Fungsi untuk logout pengguna
 export const logoutUser = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
     localStorage.removeItem('user');
 };
 
-/**
- * Memeriksa apakah pengguna sudah terotentikasi.
- * @returns {boolean} - true jika token ada, false jika tidak.
- */
+// Fungsi untuk memeriksa apakah pengguna terautentikasi
 export const isAuthenticated = () => {
-    return !!localStorage.getItem('token');
+    // Cukup periksa apakah token ada
+    return !!getToken();
 };
 
-/**
- * Mengambil daftar semua pengguna dari server (memerlukan hak akses Admin).
- */
+// Fungsi untuk mendapatkan semua pengguna (khusus Admin)
 export const getAllUsers = async () => {
-    const response = await fetch(`${API_URL}/users`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeader(),
-        },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        // --- PERBAIKAN DI SINI ---
-        // Gunakan data.msg dari backend jika ada, agar pesan error lebih jelas
-        throw new Error(data.msg || data.error || 'Gagal mengambil data pengguna.');
+    try {
+        const response = await fetch(`${API_URL}/users`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal memuat pengguna.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching all users:', error);
+        throw error;
     }
-
-    return data;
 };
 
-/**
- * Membuat pengguna baru melalui dasbor admin.
- * @param {object} userData - Data pengguna baru (nama_lengkap, email, password, role).
- */
+// Fungsi untuk membuat pengguna baru (khusus Admin)
 export const createUser = async (userData) => {
-    const response = await fetch(`${API_URL}/create-user`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeader(), // Sertakan token otentikasi
-        },
-        body: JSON.stringify(userData),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.error || 'Gagal membuat pengguna baru.');
+    try {
+        const response = await fetch(`${API_URL}/create-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(userData)
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal membuat pengguna.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error creating user:', error);
+        throw error;
     }
-
-    return data;
 };
 
-/**
- * Menghapus pengguna berdasarkan ID (memerlukan hak akses Admin).
- * @param {number} userId - ID pengguna yang akan dihapus.
- */
+// Fungsi untuk menghapus pengguna (khusus Admin)
 export const deleteUser = async (userId) => {
-    const response = await fetch(`${API_URL}/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-            ...getAuthHeader(), // Sertakan token otentikasi
-        },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.msg || data.error || 'Gagal menghapus pengguna.');
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal menghapus pengguna.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        throw error;
     }
-
-    return data;
 };
 
-/**
- * Mengambil data satu pengguna berdasarkan ID.
- * @param {string|number} userId - ID dari pengguna yang akan diambil.
- * @returns {Promise<object>} Data pengguna.
- */
+// Fungsi untuk mendapatkan pengguna berdasarkan ID (khusus Admin)
 export const getUserById = async (userId) => {
-  const response = await fetch(`${API_URL}/users/${userId}`, {
-    method: 'GET',
-    headers: {
-      ...getAuthHeader(),
-    },
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Gagal mengambil data pengguna.');
-  }
-  return data;
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal memuat detail pengguna.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching user by ID:', error);
+        throw error;
+    }
 };
 
-/**
- * Memperbarui data pengguna.
- * @param {string|number} userId - ID dari pengguna yang akan diperbarui.
- * @param {object} userData - Data baru untuk pengguna.
- * @returns {Promise<object>} Pesan sukses dari server.
- */
+// Fungsi untuk memperbarui pengguna (khusus Admin)
 export const updateUser = async (userId, userData) => {
-  const response = await fetch(`${API_URL}/users/${userId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify(userData),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Gagal memperbarui data pengguna.');
-  }
-  return data;
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(userData)
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal memperbarui pengguna.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error updating user:', error);
+        throw error;
+    }
 };
