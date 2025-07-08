@@ -95,7 +95,9 @@ export const getAllUsers = async () => {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error || 'Gagal mengambil data pengguna.');
+        // --- PERBAIKAN DI SINI ---
+        // Gunakan data.msg dari backend jika ada, agar pesan error lebih jelas
+        throw new Error(data.msg || data.error || 'Gagal mengambil data pengguna.');
     }
 
     return data;
@@ -139,7 +141,7 @@ export const deleteUser = async (userId) => {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error || 'Gagal menghapus pengguna.');
+        throw new Error(data.msg || data.error || 'Gagal menghapus pengguna.');
     }
 
     return data;

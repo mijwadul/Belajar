@@ -46,7 +46,11 @@ def login():
         return jsonify({'error': 'Email atau password salah.'}), 401
 
     additional_claims = {'role': user.role.value}
-    access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
+    
+    # --- PERBAIKAN DI SINI ---
+    # Ubah user.id menjadi string saat membuat token
+    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+    # -------------------------
     
     return jsonify({
         'message': 'Login berhasil!',
