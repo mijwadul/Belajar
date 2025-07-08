@@ -1,26 +1,28 @@
-// frontend/src/pages/LoginPage.jsx
+// frontend/src/pages/RegisterPage.jsx
 
 import React, { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { loginUser } from '../api/authService';
-import {
-  Container,
-  Box,
-  Typography,
-  TextField,
-  Button,
-  CircularProgress,
+import { registerUser } from '../api/authService';
+import { 
+  Container, 
+  Box, 
+  Typography, 
+  TextField, 
+  Button, 
+  CircularProgress, 
   Alert,
   Link
 } from '@mui/material';
 
-function LoginPage() {
+function RegisterPage() {
   const [formData, setFormData] = useState({
+    nama_lengkap: '',
     email: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -32,18 +34,21 @@ function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.email || !formData.password) {
-      setError('Email dan password harus diisi.');
+    if (!formData.nama_lengkap || !formData.email || !formData.password) {
+      setError('Semua field harus diisi.');
       return;
     }
-
+    
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
-      await loginUser(formData);
-      // Jika login berhasil, arahkan ke halaman utama aplikasi (dashboard kelas)
-      navigate('/kelas');
+      await registerUser(formData);
+      setSuccess('Registrasi berhasil! Anda akan dialihkan ke halaman login.');
+      setTimeout(() => {
+        navigate('/login'); // Arahkan ke halaman login setelah 2 detik
+      }, 2000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,9 +71,21 @@ function LoginPage() {
         }}
       >
         <Typography component="h1" variant="h5">
-          Masuk ke Akun Anda
+          Daftar Akun Baru
         </Typography>
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            id="nama_lengkap"
+            label="Nama Lengkap"
+            name="nama_lengkap"
+            autoComplete="name"
+            autoFocus
+            value={formData.nama_lengkap}
+            onChange={handleChange}
+          />
           <TextField
             margin="normal"
             required
@@ -77,7 +94,6 @@ function LoginPage() {
             label="Alamat Email"
             name="email"
             autoComplete="email"
-            autoFocus
             value={formData.email}
             onChange={handleChange}
           />
@@ -89,12 +105,13 @@ function LoginPage() {
             label="Password"
             type="password"
             id="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             value={formData.password}
             onChange={handleChange}
           />
-
+          
           {error && <Alert severity="error" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}
+          {success && <Alert severity="success" sx={{ mt: 2, width: '100%' }}>{success}</Alert>}
 
           <Button
             type="submit"
@@ -103,11 +120,11 @@ function LoginPage() {
             disabled={loading}
             sx={{ mt: 3, mb: 2, py: 1.5 }}
           >
-            {loading ? <CircularProgress size={24} color="inherit" /> : 'Masuk'}
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Daftar'}
           </Button>
           <Box textAlign="center">
-            <Link component={RouterLink} to="/register" variant="body2">
-              {"Belum punya akun? Daftar"}
+            <Link component={RouterLink} to="/login" variant="body2">
+              {"Sudah punya akun? Masuk"}
             </Link>
           </Box>
         </Box>
@@ -116,4 +133,4 @@ function LoginPage() {
   );
 }
 
-export default LoginPage;
+export default RegisterPage;

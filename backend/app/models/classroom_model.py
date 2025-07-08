@@ -1,5 +1,7 @@
 from app import db
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+import enum
 
 kelas_siswa = db.Table('kelas_siswa',
     db.Column('kelas_id', db.Integer, db.ForeignKey('kelas.id'), primary_key=True),
@@ -78,3 +80,37 @@ class JawabanSiswa(db.Model):
     skor = db.Column(db.Float, nullable=True)
     ujian_id = db.Column(db.Integer, db.ForeignKey('ujian.id'), nullable=False)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False)
+
+# Definisikan Enum untuk peran pengguna
+class UserRole(enum.Enum):
+    SUPER_USER = 'Super User'
+    ADMIN = 'Admin'
+    GURU = 'Guru'
+
+# Buat kelas model User
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nama_lengkap = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256))
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.GURU)
+
+    def set_password(self, password):
+        """Membuat hash password yang aman."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Memeriksa apakah password yang dimasukkan cocok dengan hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        """Mengubah data user menjadi dictionary (tanpa password)."""
+        return {
+            'id': self.id,
+            'nama_lengkap': self.nama_lengkap,
+            'email': self.email,
+            'role': self.role.value # .value akan mengambil string 'Guru', 'Admin', dll.
+        }
+
+    def __repr__(self):
+        return f'<User {self.nama_lengkap}>'
