@@ -3,13 +3,14 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, Container, Box } from '@mui/material';
+import { CssBaseline, Container, Box, Typography } from '@mui/material';
 
 // Import Tema dan Komponen Layout
 import theme from './theme';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import RoleBasedProtectedRoute from './components/auth/RoleBasedProtectedRoute';
 
 // Import Semua Halaman
 import LandingPage from './pages/LandingPage';
@@ -24,6 +25,9 @@ import RppDetailPage from './pages/RppDetailPage';
 import QuizGeneratorPage from './pages/QuizGeneratorPage';
 import BankSoalPage from './pages/BankSoalPage';
 import SoalDetailPage from './pages/SoalDetailPage';
+
+// Placeholder untuk halaman Admin
+const AdminDashboard = () => <Typography variant="h4">Admin Dashboard</Typography>;
 
 function App() {
   return (
@@ -44,6 +48,7 @@ function App() {
 
               {/* === Rute Terproteksi (Hanya untuk yang sudah login) === */}
               <Route element={<ProtectedRoute />}>
+                {/* Rute untuk semua peran yang sudah login (Guru, Admin, dll.) */}
                 <Route path="/kelas" element={<ClassListPage />} />
                 <Route path="/kelas/:id/siswa" element={<StudentManagementPage />} />
                 <Route path="/kelas/:id/absensi" element={<AttendancePage />} />
@@ -53,6 +58,12 @@ function App() {
                 <Route path="/generator-soal" element={<QuizGeneratorPage />} />
                 <Route path="/bank-soal" element={<BankSoalPage />} />
                 <Route path="/soal/:id" element={<SoalDetailPage />} />
+
+                {/* --- Rute KHUSUS ADMIN & SUPER USER --- */}
+                <Route element={<RoleBasedProtectedRoute allowedRoles={['Admin', 'Super User']} />}>
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  {/* Tambahkan rute admin lainnya di sini jika ada */}
+                </Route>
               </Route>
             </Routes>
           </Container>

@@ -3,56 +3,105 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { logoutUser, isAuthenticated } from '../../api/authService';
-import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
+import {
+    AppBar,
+    Toolbar,
+    Button,
+    Box,
+    IconButton,
+    Menu,
+    MenuItem,
+    useMediaQuery,
+    useTheme
+} from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+
+// Pastikan Anda sudah menempatkan logo di folder 'src/assets/'
 import logo from '../../assets/logo.png';
 
 function Navbar() {
-  const [isAuth, setIsAuth] = useState(isAuthenticated());
-  const navigate = useNavigate();
-  const location = useLocation(); // Hook untuk mendeteksi perubahan URL
+    const [isAuth, setIsAuth] = useState(isAuthenticated());
+    const [anchorEl, setAnchorEl] = useState(null); // State untuk mengontrol menu mobile
+    const navigate = useNavigate();
+    const location = useLocation();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md')); // true jika layar 'medium' atau lebih kecil
 
-  useEffect(() => {
-    setIsAuth(isAuthenticated());
-  }, [location]); 
+    // useEffect untuk memperbarui status otentikasi setiap kali URL berubah
+    useEffect(() => {
+        setIsAuth(isAuthenticated());
+    }, [location]);
 
-  const handleLogout = () => {
-    logoutUser(); // Hapus token dari localStorage
-    setIsAuth(false); // Update state
-    navigate('/login'); // Arahkan ke halaman login
-  };
+    const handleMenuOpen = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
 
-  return (
-    <AppBar position="static" color="primary">
-      <Toolbar>
-        <Box 
-          component={RouterLink} 
-          to={isAuth ? "/kelas" : "/"} 
-          sx={{ flexGrow: 1 }}
-        >
-          <img src={logo} alt="SinerGi-AI Logo" style={{ height: '40px', verticalAlign: 'middle' }} />
-        </Box>
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+    };
 
-        {isAuth ? (
-          // --- Tampilan jika SUDAH LOGIN ---
-          <>
+    const handleLogout = () => {
+        handleMenuClose(); // Tutup menu jika sedang terbuka di mobile
+        logoutUser();
+        setIsAuth(false);
+        navigate('/login');
+    };
+
+    // Fungsi bantuan untuk navigasi dari menu mobile agar menu tertutup setelah diklik
+    const handleMenuClick = (path) => {
+        handleMenuClose();
+        navigate(path);
+    }
+
+    // Komponen untuk menu versi desktop
+    const renderDesktopMenu = () => (
+        <Box>
             <Button color="inherit" component={RouterLink} to="/kelas">Manajemen Kelas</Button>
             <Button color="inherit" component={RouterLink} to="/generator-rpp">Generator RPP</Button>
             <Button color="inherit" component={RouterLink} to="/perpustakaan-rpp">Perpustakaan RPP</Button>
             <Button color="inherit" component={RouterLink} to="/generator-soal">Generator Soal</Button>
             <Button color="inherit" component={RouterLink} to="/bank-soal">Bank Soal</Button>
-            {/* Tambahkan link lain yang relevan di sini */}
             <Button color="inherit" onClick={handleLogout}>Logout</Button>
-          </>
-        ) : (
-          // --- Tampilan jika BELUM LOGIN ---
-          <Box>
-            <Button color="inherit" component={RouterLink} to="/login">Masuk</Button>
-            <Button color="inherit" component={RouterLink} to="/register">Daftar</Button>
-          </Box>
-        )}
-      </Toolbar>
-    </AppBar>
-  );
+        </Box>
+    );
+
+    // Komponen untuk menu versi mobile (hamburger)
+    const renderMobileMenu = () => (
+        <>
+            <IconButton size="large" edge="end" color="inherit" aria-label="menu" onClick={handleMenuOpen}>
+                <MenuIcon />
+            </IconButton>
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+                <MenuItem onClick={() => handleMenuClick('/kelas')}>Manajemen Kelas</MenuItem>
+                <MenuItem onClick={() => handleMenuClick('/generator-rpp')}>Generator RPP</MenuItem>
+                <MenuItem onClick={() => handleMenuClick('/perpustakaan-rpp')}>Perpustakaan RPP</MenuItem>
+                <MenuItem onClick={() => handleMenuClick('/generator-soal')}>Generator Soal</MenuItem>
+                <MenuItem onClick={() => handleMenuClick('/bank-soal')}>Bank Soal</MenuItem>
+                <MenuItem onClick={handleLogout}>Logout</MenuItem>
+            </Menu>
+        </>
+    );
+
+    return (
+        <AppBar position="sticky" color="primary">
+            <Toolbar sx={{ justifyContent: 'space-between' }}>
+                <Box component={RouterLink} to={isAuth ? "/kelas" : "/"}>
+                    <img src={logo} alt="SinerGi-AI Logo" style={{ height: '40px', verticalAlign: 'middle' }} />
+                </Box>
+
+                {isAuth ? (
+                    // Jika sudah login, tampilkan menu sesuai ukuran layar
+                    isMobile ? renderMobileMenu() : renderDesktopMenu()
+                ) : (
+                    // Jika belum login, tampilkan tombol Masuk dan Daftar
+                    <Box>
+                        <Button color="inherit" component={RouterLink} to="/login">Masuk</Button>
+                        <Button color="inherit" component={RouterLink} to="/register">Daftar</Button>
+                    </Box>
+                )}
+            </Toolbar>
+        </AppBar>
+    );
 }
 
 export default Navbar;
