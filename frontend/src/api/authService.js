@@ -95,7 +95,7 @@ export const getAllUsers = async () => {
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error || 'Gagal mengambil data pengguna.');
+        throw new Error(data.msg || data.error || 'Gagal mengambil data pengguna.');
     }
 
     return data;

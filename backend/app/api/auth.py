@@ -45,9 +45,8 @@ def login():
     if not user or not user.check_password(data['password']):
         return jsonify({'error': 'Email atau password salah.'}), 401
 
-    # Buat token dengan menyertakan peran (role) di dalamnya
     additional_claims = {'role': user.role.value}
-    access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
+    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
     
     return jsonify({
         'message': 'Login berhasil!',
