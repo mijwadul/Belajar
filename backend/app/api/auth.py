@@ -116,6 +116,58 @@ def create_user():
 
     return jsonify({'message': f'Pengguna {nama_lengkap} berhasil dibuat dengan peran {role_str}.', 'user': new_user.to_dict()}), 201
 
+@bp.route('/users/<int:id>', methods=['GET'])
+@jwt_required()
+def get_user(id):
+    """Endpoint untuk mengambil data satu pengguna berdasarkan ID."""
+    # Pastikan hanya admin yang bisa mengakses
+    claims = get_jwt()
+    current_user_role = claims.get('role')
+    if current_user_role not in ['Admin', 'Super User']:
+        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
+        
+    user = User.query.get_or_404(id)
+    return jsonify(user.to_dict())
+
+@bp.route('/users/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def update_user(user_id):
+    """Endpoint untuk memperbarui data pengguna."""
+    claims = get_jwt()
+    current_user_role = claims.get('role')
+    if current_user_role not in ['Admin', 'Super User']:
+        return jsonify({'error': 'Akses tidak diizinkan.'}), 403
+
+    user_to_update = User.query.get_or_404(user_id)
+    data = request.get_json()
+
+    # Validasi email agar tidak duplikat dengan pengguna lain
+    new_email = data.get('email')
+    if new_email and new_email != user_to_update.email and User.query.filter_by(email=new_email).first():
+        return jsonify({'error': 'Email sudah digunakan oleh pengguna lain.'}), 409
+
+    # --- PERBAIKAN DI SINI ---
+    # Menggunakan 'nama_lengkap' sesuai dengan model database
+    user_to_update.nama_lengkap = data.get('nama_lengkap', user_to_update.nama_lengkap)
+    user_to_update.email = data.get('email', user_to_update.email)
+
+    # Update peran jika ada dalam data
+    if 'role' in data:
+        role_str = data.get('role')
+        try:
+            role_enum = UserRole[role_str.upper().replace(" ", "_")]
+            user_to_update.role = role_enum
+        except KeyError:
+            return jsonify({'error': f'Peran "{role_str}" tidak valid.'}), 400
+
+    # Update password hanya jika diisi
+    password = data.get('password')
+    if password:
+        user_to_update.set_password(password)
+
+    db.session.commit()
+    return jsonify({'message': f'Pengguna {user_to_update.nama_lengkap} berhasil diperbarui.'}), 200
+
 @bp.route('/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 def delete_user(user_id):

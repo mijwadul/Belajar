@@ -146,3 +146,46 @@ export const deleteUser = async (userId) => {
 
     return data;
 };
+
+/**
+ * Mengambil data satu pengguna berdasarkan ID.
+ * @param {string|number} userId - ID dari pengguna yang akan diambil.
+ * @returns {Promise<object>} Data pengguna.
+ */
+export const getUserById = async (userId) => {
+  const response = await fetch(`${API_URL}/users/${userId}`, {
+    method: 'GET',
+    headers: {
+      ...getAuthHeader(),
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Gagal mengambil data pengguna.');
+  }
+  return data;
+};
+
+/**
+ * Memperbarui data pengguna.
+ * @param {string|number} userId - ID dari pengguna yang akan diperbarui.
+ * @param {object} userData - Data baru untuk pengguna.
+ * @returns {Promise<object>} Pesan sukses dari server.
+ */
+export const updateUser = async (userId, userData) => {
+  const response = await fetch(`${API_URL}/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify(userData),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Gagal memperbarui data pengguna.');
+  }
+  return data;
+};

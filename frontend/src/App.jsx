@@ -14,6 +14,7 @@ import RoleBasedProtectedRoute from './components/auth/RoleBasedProtectedRoute';
 
 // Import Semua Halaman
 import UserManagementPage from './pages/admin/UserManagementPage';
+import EditUserPage from './pages/admin/EditUserPage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
