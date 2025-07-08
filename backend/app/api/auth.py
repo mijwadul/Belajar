@@ -3,7 +3,7 @@
 from flask import Blueprint, request, jsonify
 from ..models.classroom_model import User, db, UserRole
 from sqlalchemy.exc import IntegrityError
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt, get_jwt_identity 
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 

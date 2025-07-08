@@ -14,25 +14,31 @@ jwt = JWTManager()
 def create_app():
     app = Flask(__name__)
 
-    # --- KONFIGURASI EKSPLISIT ---
-    # Alih-alih memuat dari objek, kita atur satu per satu secara langsung.
-    # Ini adalah cara paling pasti untuk memastikan konfigurasi dimuat.
+    # --- KONFIGURASI APLIKASI ---
     app.config["SQLALCHEMY_DATABASE_URI"] = Config.SQLALCHEMY_DATABASE_URI
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = Config.SQLALCHEMY_TRACK_MODIFICATIONS
-    app.config["JWT_SECRET_KEY"] = Config.JWT_SECRET_KEY # <- Paling penting
+    app.config["JWT_SECRET_KEY"] = Config.JWT_SECRET_KEY
 
-    # Inisialisasi ekstensi
+    # --- KONFIGURASI PENTING UNTUK JWT ---
+    # Beri tahu JWT untuk mencari token hanya di header
+    app.config["JWT_TOKEN_LOCATION"] = ["headers"]
+    # Nonaktifkan proteksi CSRF
+    app.config["JWT_CSRF_PROTECTION"] = False
+
+
+    # --- INISIALISASI EKSTENSI ---
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(
-        app, 
-        resources={r"/api/*": {"origins": "http://localhost:3000"}}, 
-        supports_credentials=True,
-        allow_headers=["Authorization", "Content-Type"] # <-- Tambahkan ini
-    )
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "http://localhost:3000",
+            "supports_credentials": True,
+            "allow_headers": ["Authorization", "Content-Type"]
+        }
+    })
 
-    # Daftarkan Blueprint
+    # --- DAFTARKAN BLUEPRINT ---
     with app.app_context():
         from .api import auth, classroom, ai_tools
         app.register_blueprint(auth.bp)
