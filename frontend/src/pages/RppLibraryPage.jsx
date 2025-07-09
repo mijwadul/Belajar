@@ -1,8 +1,15 @@
 // frontend/src/pages/RppLibraryPage.jsx
 
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getAllRpps } from '../api/aiService';
+import { Link as RouterLink } from 'react-router-dom'; // Menggunakan Link dari react-router-dom sebagai RouterLink
+import { getAllRpps } from '../api/aiService'; // Memastikan fungsi ini ada dan diimpor
+import {
+    Container, Box, Typography, Paper,
+    Table, TableContainer, TableHead, TableBody, TableRow, TableCell,
+    CircularProgress, // Untuk indikator loading
+    Link // Untuk styling Link dari MUI
+} from '@mui/material';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories'; // Ikon untuk perpustakaan RPP
 
 function RppLibraryPage() {
     const [rppList, setRppList] = useState([]);
@@ -15,6 +22,7 @@ function RppLibraryPage() {
                 setRppList(data);
             } catch (error) {
                 console.error("Gagal memuat RPP:", error);
+                // Opsional: tampilkan snackbar error
             } finally {
                 setIsLoading(false);
             }
@@ -22,41 +30,61 @@ function RppLibraryPage() {
         muatData();
     }, []);
 
-    if (isLoading) {
-        return <p>Memuat perpustakaan RPP...</p>;
-    }
-
     return (
-        <div style={{ padding: '20px' }}>
-            <h1>Perpustakaan RPP</h1>
-            <p>Berikut adalah daftar semua RPP yang pernah Anda simpan.</p>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr>
-                        <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Judul RPP</th>
-                        <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Kelas Terkait</th>
-                        <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Tanggal Dibuat</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rppList.length > 0 ? (
-                        rppList.map(rpp => (
-                            <tr key={rpp.id}>
-                                <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                                    <Link to={`/rpp/${rpp.id}`}>{rpp.judul}</Link>
-                                </td>
-                                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{rpp.nama_kelas}</td>
-                                <td style={{ border: '1px solid #ddd', padding: '8px' }}>{rpp.tanggal_dibuat}</td>
-                            </tr>
-                        ))
-                    ) : (
-                        <tr>
-                            <td colSpan="3" style={{ textAlign: 'center', padding: '10px' }}>Perpustakaan masih kosong.</td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
-        </div>
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                <AutoStoriesIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 'inherit' }} /> Perpustakaan RPP
+            </Typography>
+            <Typography variant="h6" color="text.secondary" gutterBottom align="center" sx={{ mb: 4 }}>
+                Berikut adalah daftar semua RPP yang pernah Anda simpan.
+            </Typography>
+
+            <Paper elevation={3} sx={{ p: 3, borderRadius: '12px', overflow: 'hidden' }}> {/* Menggunakan Paper untuk card */}
+                {isLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                        <CircularProgress />
+                        <Typography sx={{ ml: 2, color: 'text.secondary' }}>Memuat perpustakaan RPP...</Typography>
+                    </Box>
+                ) : rppList.length > 0 ? (
+                    <TableContainer>
+                        <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                            <TableHead sx={{ backgroundColor: 'action.hover' }}> {/* Styling header tabel */}
+                                <TableRow>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Judul RPP</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Kelas Terkait</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Tanggal Dibuat</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {rppList.map((rpp) => (
+                                    <TableRow
+                                        key={rpp.id}
+                                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                                    >
+                                        <TableCell component="th" scope="row">
+                                            <Link component={RouterLink} to={`/rpp/${rpp.id}`} sx={{ textDecoration: 'none', color: 'primary.main', fontWeight: 'medium' }}>
+                                                {rpp.judul}
+                                            </Link>
+                                        </TableCell>
+                                        <TableCell>{rpp.nama_kelas}</TableCell>
+                                        <TableCell>{rpp.tanggal_dibuat}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                ) : (
+                    <Box sx={{ p: 5, textAlign: 'center' }}>
+                        <Typography variant="h6" color="text.secondary">
+                            Perpustakaan RPP masih kosong.
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                            Silakan buat RPP baru dari halaman "Generator RPP".
+                        </Typography>
+                    </Box>
+                )}
+            </Paper>
+        </Container>
     );
 }
 
