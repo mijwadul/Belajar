@@ -180,3 +180,23 @@ export const getSoalById = async (idSoal) => {
         throw error;
     }
 };
+
+// --- NEW: Fungsi untuk menghapus Soal berdasarkan ID ---
+export const deleteSoal = async (idSoal) => {
+    try {
+        const response = await fetch(`${API_URL}/soal/${idSoal}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal menghapus soal dengan ID ${idSoal}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error deleting Soal with ID ${idSoal}:`, error);
+        throw error;
+    }
+};

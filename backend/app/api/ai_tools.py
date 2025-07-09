@@ -187,3 +187,27 @@ def lihat_satu_soal(id_soal):
         'konten_json': konten,
         'judul_rpp': soal_set.rpp.judul
     })
+
+@bp.route('/soal/<int:id_soal>', methods=['GET', 'DELETE']) # Tambah DELETE method
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def kelola_satu_soal(id_soal): # Ubah nama fungsi agar bisa menangani GET dan DELETE
+    soal_set = Soal.query.get_or_404(id_soal)
+
+    if request.method == 'GET':
+        konten = json.loads(soal_set.konten_json)
+        return jsonify({
+            'id': soal_set.id,
+            'judul': soal_set.judul,
+            'konten_json': konten,
+            'judul_rpp': soal_set.rpp.judul
+        })
+    elif request.method == 'DELETE':
+        try:
+            db.session.delete(soal_set)
+            db.session.commit()
+            return jsonify({'message': f'Set soal "{soal_set.judul}" berhasil dihapus!'}), 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error deleting soal set: {e}")
+            return jsonify({'message': 'Gagal menghapus set soal.', 'details': str(e)}), 500
