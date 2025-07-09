@@ -1,14 +1,15 @@
 # backend/app/api/ai_tools.py
 
 import json
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_file
 from app.services.ai_service import AIService
-from app.models.classroom_model import RPP, Kelas, Soal # Disesuaikan agar Kelas dan Soal diimpor untuk referensi jika dibutuhkan
+from app.models.classroom_model import RPP, Kelas, Soal
 from app import db
 from flask_jwt_extended import jwt_required
 from app.api.auth import roles_required
 import os
 import uuid
+from fpdf import FPDF # <-- Import FPDF (pastikan 'fpdf' dari 'fpdf2' yang diinstal)
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
 
@@ -18,12 +19,10 @@ bp = Blueprint('ai_api', __name__, url_prefix='/api')
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_rpp_endpoint():
-    # Inisialisasi AIService dengan nama model dari konfigurasi aplikasi
     ai_service_instance = AIService(current_app.config['GEMINI_MODEL'])
     
-    data = request.form # Menggunakan request.form untuk data selain file
+    data = request.form
     
-    # Periksa data input utama (indikator dan tujuan_pembelajaran TIDAK LAGI DIHARAPKAN DARI INPUT FORM)
     required_fields = ['mapel', 'jenjang', 'topik', 'alokasi_waktu']
     if not all(k in data for k in required_fields):
         return jsonify({'message': 'Data input tidak lengkap. Pastikan mapel, jenjang, topik, alokasi_waktu terisi.'}), 400
@@ -61,7 +60,7 @@ def generate_rpp_endpoint():
         )
         return jsonify({'rpp': hasil_rpp}), 200
     except Exception as e:
-        print(f"Terjadi kesalahan saat memanggil AI untuk RPP: {e}")
+        print(f"Error saat memanggil AI untuk RPP: {e}")
         return jsonify({'message': f'Terjadi kesalahan internal: {e}'}), 500
     finally:
         if file_path and os.path.exists(file_path):
@@ -118,11 +117,9 @@ def lihat_satu_rpp(id_rpp):
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_soal_endpoint():
-    # Inisialisasi AIService dengan nama model dari konfigurasi aplikasi
     ai_service_instance = AIService(current_app.config['GEMINI_MODEL'])
     
     data = request.get_json()
-    # PERUBAHAN: Validasi sekarang mengharapkan 'taksonomi_bloom_level'
     if not data or not all(k in data for k in ['rpp_id', 'jenis_soal', 'jumlah_soal', 'taksonomi_bloom_level']):
         return jsonify({'message': 'Data input tidak lengkap. Pastikan rpp_id, jenis_soal, jumlah_soal, dan taksonomi_bloom_level terisi.'}), 400
 
@@ -130,12 +127,11 @@ def generate_soal_endpoint():
     sumber_materi = rpp.konten_markdown
 
     try:
-        # PERUBAHAN: Meneruskan 'taksonomi_bloom_level' ke fungsi AI
         hasil_soal_json_str = ai_service_instance.generate_soal_from_ai(
             sumber_materi=sumber_materi,
             jenis_soal=data['jenis_soal'],
             jumlah_soal=data['jumlah_soal'],
-            taksonomi_bloom_level=data['taksonomi_bloom_level'] # Menggunakan parameter baru
+            taksonomi_bloom_level=data['taksonomi_bloom_level']
         )
         return jsonify(json.loads(hasil_soal_json_str))
     except Exception as e:
@@ -175,23 +171,10 @@ def lihat_semua_soal():
         })
     return jsonify(hasil)
 
-@bp.route('/soal/<int:id_soal>', methods=['GET'])
+@bp.route('/soal/<int:id_soal>', methods=['GET', 'DELETE'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
-def lihat_satu_soal(id_soal):
-    soal_set = Soal.query.get_or_404(id_soal)
-    konten = json.loads(soal_set.konten_json)
-    return jsonify({
-        'id': soal_set.id,
-        'judul': soal_set.judul,
-        'konten_json': konten,
-        'judul_rpp': soal_set.rpp.judul
-    })
-
-@bp.route('/soal/<int:id_soal>', methods=['GET', 'DELETE']) # Tambah DELETE method
-@jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
-def kelola_satu_soal(id_soal): # Ubah nama fungsi agar bisa menangani GET dan DELETE
+def kelola_satu_soal(id_soal):
     soal_set = Soal.query.get_or_404(id_soal)
 
     if request.method == 'GET':
@@ -211,3 +194,48 @@ def kelola_satu_soal(id_soal): # Ubah nama fungsi agar bisa menangani GET dan DE
             db.session.rollback()
             print(f"Error deleting soal set: {e}")
             return jsonify({'message': 'Gagal menghapus set soal.', 'details': str(e)}), 500
+
+# --- NEW ENDPOINT: Generate Exam PDF ---
+@bp.route('/generate-exam-pdf', methods=['POST'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def generate_exam_pdf_endpoint():
+    data = request.get_json()
+    exam_title = data.get('exam_title', 'Ujian')
+    questions_data = data.get('questions', []) # Asumsi ini adalah list objek soal lengkap
+
+    if not questions_data:
+        return jsonify({'message': 'Tidak ada soal yang diberikan untuk membuat ujian.'}), 400
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, exam_title, 0, 1, 'C')
+    pdf.ln(10)
+
+    pdf.set_font("Arial", "", 12)
+
+    for i, q_data in enumerate(questions_data):
+        pdf.set_font("Arial", "B", 12)
+        pdf.multi_cell(0, 8, f"{i+1}. {q_data.get('pertanyaan', '')}")
+        
+        if q_data.get('pilihan'):
+            pdf.set_font("Arial", "", 10)
+            for option_key, option_value in q_data['pilihan'].items():
+                pdf.multi_cell(0, 6, f"   {option_key}. {option_value}")
+            pdf.ln(1) # Spasi setelah pilihan
+
+        pdf.set_font("Arial", "I", 10) # Italic for answer
+        if q_data.get('jawaban_benar'):
+            pdf.cell(0, 6, f"   Jawaban Benar: {q_data['jawaban_benar']}")
+        elif q_data.get('jawaban_ideal'):
+            pdf.multi_cell(0, 6, f"   Jawaban Ideal: {q_data['jawaban_ideal']}")
+        pdf.ln(5) # Spasi setelah jawaban
+
+    # Simpan PDF sementara
+    output_path = os.path.join(current_app.root_path, 'temp_exam.pdf')
+    pdf.output(output_path)
+
+    # Kirim file PDF sebagai respons
+    return send_file(output_path, as_attachment=True, download_name=f"{exam_title}.pdf", mimetype='application/pdf')

@@ -200,3 +200,40 @@ export const deleteSoal = async (idSoal) => {
         throw error;
     }
 };
+
+export const downloadExamPdf = async (examTitle, questionsData) => {
+    try {
+        const response = await fetch(`${API_URL}/generate-exam-pdf`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify({
+                exam_title: examTitle,
+                questions: questionsData // Kirim array objek soal lengkap
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal mengunduh ujian PDF.');
+        }
+
+        // Tangani respons file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${examTitle.replace(/[^a-z0-9]/gi, '_') || 'Ujian'}.pdf`; // Nama file
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url); // Bersihkan URL objek
+
+        return { message: 'Ujian PDF berhasil diunduh!' };
+    } catch (error) {
+        console.error("Error downloading exam PDF:", error);
+        throw error;
+    }
+};

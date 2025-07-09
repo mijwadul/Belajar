@@ -43,7 +43,7 @@ function LoginPage() {
     try {
       await loginUser(formData);
       // Jika login berhasil, arahkan ke halaman utama aplikasi (dashboard kelas)
-      navigate('/kelas');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {

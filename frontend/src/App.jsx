@@ -32,9 +32,7 @@ import DashboardPage from './pages/DashboardPage';
 // Import komponen admin dengan path yang benar
 import UserManagementPage from './pages/admin/UserManagementPage'; // Path yang benar
 import EditUserPage from './pages/admin/EditUserPage'; // Path yang benar
-
-// --- DEFERRED: Import ExamGeneratorPage akan dilakukan setelah file dibuat ---
-// import ExamGeneratorPage from './pages/ExamGeneratorPage';
+import ExamGeneratorPage from './pages/ExamGeneratorPage';
 
 
 function App() {
@@ -68,9 +66,7 @@ function App() {
                 <Route path="/generator-soal" element={<QuizGeneratorPage />} />
                 <Route path="/bank-soal" element={<BankSoalPage />} />
                 <Route path="/soal/:id" element={<SoalDetailPage />} />
-
-                {/* --- DEFERRED: Rute ExamGeneratorPage akan dilakukan setelah file dibuat --- */}
-                {/* <Route path="/exam-generator" element={<ExamGeneratorPage />} /> */}
+                <Route path="/exam-generator" element={<ExamGeneratorPage />} />
 
                 {/* Rute Admin (dilindungi peran) */}
                 <Route element={<RoleBasedProtectedRoute allowedRoles={['Admin', 'Super User']} />}>
