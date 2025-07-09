@@ -1,44 +1,90 @@
 import google.generativeai as genai
 import os
 import json
+import PyPDF2 # Import PyPDF2 untuk ekstraksi PDF
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+class AIService:
+    # Konstruktor menerima model_name_str sebagai parameter
+    def __init__(self, model_name_str): #
+        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+        # Menggunakan model_name_str yang diterima
+        self.model = genai.GenerativeModel(model_name_str)
+        # Inisialisasi sesi chat (opsional, tergantung kebutuhan percakapan berkelanjutan)
+        self.chat_session = self.model.start_chat(history=[])
 
-def generate_rpp_from_ai(mapel, jenjang, topik, alokasi_waktu, file_upload=None):
-    """
-    Membuat draf RPP, dengan file sebagai konteks jika disediakan.
-    """
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    prompt = f"""
-    Anda adalah seorang ahli Kurikulum Merdeka di Indonesia.
-    Berdasarkan informasi di bawah ini DAN file yang saya unggah (jika ada), tolong buatkan draf Modul Ajar yang sangat detail. Jadikan file yang diunggah sebagai sumber referensi utama.
+    def _extract_text_from_pdf(self, file_path):
+        """Mengekstrak teks dari file PDF."""
+        text = ""
+        try:
+            with open(file_path, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                for page_num in range(len(reader.pages)):
+                    page = reader.pages[page_num]
+                    text += page.extract_text() or "" # extract_text() bisa mengembalikan None
+            return text
+        except Exception as e:
+            raise Exception(f"Gagal mengekstrak teks dari PDF: {e}")
 
-    **Informasi Modul Ajar:**
-    - Fase/Kelas: {jenjang}
-    - Mata Pelajaran: {mapel}
-    - Topik/Materi Pokok: {topik}
-    - Alokasi Waktu: {alokasi_waktu}
+    # Metode untuk ekstraksi teks dari DOCX atau TXT dapat ditambahkan di sini
+    # def _extract_text_from_docx(self, file_path): ...
+    # def _extract_text_from_txt(self, file_path): ...
 
-    (Gunakan seluruh aturan dan struktur RPP Kurikulum Merdeka yang sudah Anda ketahui sebelumnya, termasuk aturan aksara khusus dan penyesuaian jenjang).
-    """
+    def generate_rpp_from_ai(self, mapel, jenjang, topik, alokasi_waktu, file_path=None):
+        """
+        Membuat draf RPP, dengan file sebagai konteks jika disediakan.
+        `jenjang` diharapkan sudah dalam format spesifik seperti "SD Kelas 1A".
+        """
+        prompt_parts = []
+        document_context_text = ""
 
-    try:
-        konten_untuk_ai = [prompt]
-        if file_upload:
-            konten_untuk_ai.append(file_upload)
+        if file_path:
+            file_extension = os.path.splitext(file_path)[1].lower()
+            if file_extension == '.pdf':
+                document_context_text = self._extract_text_from_pdf(file_path)
+            # elif file_extension == '.docx':
+            #     document_context_text = self._extract_text_from_docx(file_path)
+            # elif file_extension == '.txt':
+            #     document_context_text = self._extract_text_from_txt(file_path)
+            else:
+                print(f"Warning: Tipe file '{file_extension}' tidak didukung untuk ekstraksi teks.")
         
-        response = model.generate_content(konten_untuk_ai)
-        return response.text
-    except Exception as e:
-        print(f"Error saat memanggil AI untuk RPP: {e}")
-        return "Terjadi kesalahan saat berkomunikasi dengan AI."
+        # Tambahkan teks dokumen yang diekstrak ke prompt jika ada, dengan penekanan sebagai REFERENSI UTAMA
+        if document_context_text:
+            prompt_parts.append(f"Materi utama untuk RPP ini diambil dari dokumen referensi berikut. Mohon gunakan dokumen ini sebagai sumber utama dan ikuti alur serta inti dari dokumen tersebut:\n---\n{document_context_text}\n---\n\n")
 
-def generate_soal_from_ai(sumber_materi, jenis_soal, jumlah_soal, tingkat_kesulitan):
-    """
-    Membuat soal evaluasi dari sumber materi (RPP).
-    """
-    prompt = f"""
+        prompt_parts.append(f"""
+Anda adalah seorang ahli Kurikulum Merdeka di Indonesia.
+Berdasarkan informasi di bawah ini, tolong buatkan draf Modul Ajar yang sangat detail.
+Fokus pada **{jenjang}** untuk penyesuaian konten dan pedagogi.
+
+**Informasi Modul Ajar:**
+- Fase/Kelas: {jenjang}
+- Mata Pelajaran: {mapel}
+- Topik/Materi Pokok: {topik}
+- Alokasi Waktu: {alokasi_waktu}
+
+Sertakan komponen-komponen RPP yang lengkap (Pendahuluan, Kegiatan Inti, Penutup, Penilaian, Sumber Belajar, dll.).
+**Pastikan Indikator Pembelajaran dan Tujuan Pembelajaran juga Anda hasilkan** berdasarkan topik dan materi.
+Format RPP dalam Markdown.
+""")
+
+        full_prompt = "".join(prompt_parts)
+        
+        try:
+            response = self.model.generate_content(full_prompt)
+            
+            if hasattr(response, 'parts') and response.parts:
+                return "".join([part.text for part in response.parts])
+            return response.text
+        except Exception as e:
+            print(f"Error saat memanggil AI untuk RPP: {e}")
+            raise Exception(f"Terjadi kesalahan saat berkomunikasi dengan AI: {e}")
+
+    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, tingkat_kesulitan):
+        """
+        Membuat soal evaluasi dari sumber materi (RPP).
+        """
+        prompt = f"""
     Anda adalah seorang guru ahli dalam membuat soal evaluasi yang sesuai dengan Kurikulum Merdeka dan Taksonomi Bloom.
     Berdasarkan sumber materi di bawah ini, buatkan satu set soal.
 
@@ -77,12 +123,11 @@ def generate_soal_from_ai(sumber_materi, jenis_soal, jumlah_soal, tingkat_kesuli
 
     Pastikan semua pertanyaan relevan dengan sumber materi yang diberikan.
     """
-    
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
-        json_output = response.text.strip().replace("```json", "").replace("```", "")
-        return json_output
-    except Exception as e:
-        print(f"Error saat memanggil AI untuk membuat soal: {e}")
-        return json.dumps({ "error": "Terjadi kesalahan saat berkomunikasi dengan AI." })
+        
+        try:
+            response = self.model.generate_content(prompt)
+            json_output = response.text.strip().replace("```json", "").replace("```", "")
+            return json_output
+        except Exception as e:
+            print(f"Error saat memanggil AI untuk membuat soal: {e}")
+            raise Exception(f"Terjadi kesalahan saat berkomunikasi dengan AI: {e}")

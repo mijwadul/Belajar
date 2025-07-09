@@ -1,82 +1,182 @@
 // frontend/src/api/aiService.js
 
-const API_URL = 'http://127.0.0.1:5000/api';
+import { getAuthHeader } from './authService'; // Import fungsi untuk mendapatkan header otorisasi
 
-// Fungsi untuk men-generate RPP dari AI
-export const generateRpp = async (dataRpp) => {
-    const data = new FormData();
-    for (const key in dataRpp) {
-        if (key !== 'file') {
-            data.append(key, dataRpp[key]);
+const API_URL = 'http://localhost:5000/api'; // Sesuaikan jika API Anda berjalan di port atau domain lain
+
+// --- Fungsi untuk menghasilkan RPP dari AI ---
+export const generateRppFromAI = async (data) => {
+    try {
+        const formData = new FormData();
+        formData.append('mapel', data.mapel);
+        formData.append('jenjang', data.jenjang);
+        formData.append('topik', data.topik);
+        formData.append('alokasi_waktu', data.alokasi_waktu);
+        if (data.file) {
+            formData.append('file', data.file);
         }
-    }
-    if (dataRpp.file) {
-        data.append('file', dataRpp.file);
-    }
+        if (data.pendekatan_pedagogis) {
+            formData.append('pendekatan_pedagogis', data.pendekatan_pedagogis);
+        }
 
-    const response = await fetch(`${API_URL}/generate-rpp`, {
-        method: 'POST',
-        body: data,
-    });
-    if (!response.ok) {
-        throw new Error('Gagal membuat RPP dari AI');
+        const response = await fetch(`${API_URL}/generate-rpp`, {
+            method: 'POST',
+            headers: {
+                'Authorization': getAuthHeader()
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menghasilkan RPP dari AI.');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error generating RPP from AI:", error);
+        throw error;
     }
-    return response.json();
 };
 
-// Fungsi untuk menyimpan RPP yang sudah di-generate
-export const saveRpp = async (dataRpp) => {
-    const response = await fetch(`${API_URL}/rpp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataRpp),
-    });
-    if (!response.ok) throw new Error('Gagal menyimpan RPP');
-    return response.json();
+// --- Fungsi untuk menyimpan RPP ---
+export const simpanRpp = async (rppData) => {
+    try {
+        const response = await fetch(`${API_URL}/rpp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(rppData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menyimpan RPP');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error saving RPP:", error);
+        throw error;
+    }
 };
 
-// Fungsi untuk mengambil semua RPP dari perpustakaan
+// --- NEW: Fungsi untuk mendapatkan semua RPP ---
 export const getAllRpps = async () => {
-    const response = await fetch(`${API_URL}/rpp`);
-    if (!response.ok) throw new Error('Gagal mengambil daftar RPP');
-    return response.json();
+    try {
+        const response = await fetch(`${API_URL}/rpp`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat daftar RPP');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching all RPPs:", error);
+        throw error;
+    }
 };
 
-// Fungsi untuk mengambil detail satu RPP berdasarkan ID
-export const getRppById = async (id) => {
-    const response = await fetch(`${API_URL}/rpp/${id}`);
-    if (!response.ok) throw new Error('Gagal mengambil detail RPP');
-    return response.json();
+// --- NEW: Fungsi untuk mendapatkan RPP berdasarkan ID ---
+export const getRppById = async (idRpp) => {
+    try {
+        const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memuat RPP dengan ID ${idRpp}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching RPP with ID ${idRpp}:`, error);
+        throw error;
+    }
 };
 
-export const generateSoal = async (params) => {
-    const response = await fetch(`${API_URL}/generate-soal`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-    });
-    if (!response.ok) throw new Error('Gagal membuat soal');
-    return response.json();
+// --- Fungsi untuk menghasilkan soal dari AI ---
+export const generateSoalFromAI = async (data) => {
+    try {
+        const response = await fetch(`${API_URL}/generate-soal`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menghasilkan soal dari AI.');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error generating Soal from AI:", error);
+        throw error;
+    }
 };
 
-export const saveSoal = async (dataSoal) => {
-    const response = await fetch(`${API_URL}/soal`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataSoal),
-    });
-    if (!response.ok) throw new Error('Gagal menyimpan soal');
-    return response.json();
+// --- Fungsi untuk menyimpan Soal ---
+export const simpanSoal = async (soalData) => {
+    try {
+        const response = await fetch(`${API_URL}/soal`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(soalData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menyimpan soal');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error saving Soal:", error);
+        throw error;
+    }
 };
 
+// --- NEW: Fungsi untuk mendapatkan semua Soal ---
 export const getAllSoal = async () => {
-    const response = await fetch(`${API_URL}/soal`);
-    if (!response.ok) throw new Error('Gagal mengambil bank soal');
-    return response.json();
+    try {
+        const response = await fetch(`${API_URL}/soal`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat daftar soal');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching all Soal:", error);
+        throw error;
+    }
 };
 
-export const getSoalById = async (id) => {
-    const response = await fetch(`${API_URL}/soal/${id}`);
-    if (!response.ok) throw new Error('Gagal mengambil detail soal');
-    return response.json();
+// --- NEW: Fungsi untuk mendapatkan Soal berdasarkan ID ---
+export const getSoalById = async (idSoal) => {
+    try {
+        const response = await fetch(`${API_URL}/soal/${idSoal}`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memuat soal dengan ID ${idSoal}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching Soal with ID ${idSoal}:`, error);
+        throw error;
+    }
 };

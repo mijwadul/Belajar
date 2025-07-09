@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
-from .config import Config
+from .config import Config # [cite: 2]
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -20,6 +20,8 @@ def create_app():
     app.config["JWT_SECRET_KEY"] = Config.JWT_SECRET_KEY
     app.config["JWT_TOKEN_LOCATION"] = ["headers"]
     app.config["JWT_CSRF_PROTECTION"] = False
+    # PENTING: Tambahkan baris ini untuk memuat GEMINI_MODEL
+    app.config["GEMINI_MODEL"] = Config.GEMINI_MODEL # [cite: 2]
 
 
     # --- INISIALISASI EKSTENSI ---
