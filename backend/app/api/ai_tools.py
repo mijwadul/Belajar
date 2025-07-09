@@ -1,14 +1,14 @@
 # backend/app/api/ai_tools.py
 
 import json
-from flask import Blueprint, request, jsonify, current_app # Import current_app
+from flask import Blueprint, request, jsonify, current_app
 from app.services.ai_service import AIService
-from app.models.classroom_model import RPP, Kelas, Soal
+from app.models.classroom_model import RPP, Kelas, Soal # Disesuaikan agar Kelas dan Soal diimpor untuk referensi jika dibutuhkan
 from app import db
 from flask_jwt_extended import jwt_required
 from app.api.auth import roles_required
-import os # Untuk operasi file sistem
-import uuid # Untuk menghasilkan nama file unik
+import os
+import uuid
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
 
@@ -54,7 +54,7 @@ def generate_rpp_endpoint():
     try:
         hasil_rpp = ai_service_instance.generate_rpp_from_ai(
             mapel=data['mapel'],
-            jenjang=data['jenjang'], # Jenjang kini diharapkan sudah spesifik dari frontend
+            jenjang=data['jenjang'],
             topik=data['topik'],
             alokasi_waktu=data['alokasi_waktu'],
             file_path=file_path
@@ -122,18 +122,20 @@ def generate_soal_endpoint():
     ai_service_instance = AIService(current_app.config['GEMINI_MODEL'])
     
     data = request.get_json()
-    if not data or not all(k in data for k in ['rpp_id', 'jenis_soal', 'jumlah_soal', 'tingkat_kesulitan']):
-        return jsonify({'message': 'Data input tidak lengkap'}), 400
+    # PERUBAHAN: Validasi sekarang mengharapkan 'taksonomi_bloom_level'
+    if not data or not all(k in data for k in ['rpp_id', 'jenis_soal', 'jumlah_soal', 'taksonomi_bloom_level']):
+        return jsonify({'message': 'Data input tidak lengkap. Pastikan rpp_id, jenis_soal, jumlah_soal, dan taksonomi_bloom_level terisi.'}), 400
 
     rpp = RPP.query.get_or_404(data['rpp_id'])
     sumber_materi = rpp.konten_markdown
 
     try:
+        # PERUBAHAN: Meneruskan 'taksonomi_bloom_level' ke fungsi AI
         hasil_soal_json_str = ai_service_instance.generate_soal_from_ai(
             sumber_materi=sumber_materi,
             jenis_soal=data['jenis_soal'],
             jumlah_soal=data['jumlah_soal'],
-            tingkat_kesulitan=data['tingkat_kesulitan']
+            taksonomi_bloom_level=data['taksonomi_bloom_level'] # Menggunakan parameter baru
         )
         return jsonify(json.loads(hasil_soal_json_str))
     except Exception as e:

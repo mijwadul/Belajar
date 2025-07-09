@@ -80,9 +80,11 @@ Format RPP dalam Markdown.
             print(f"Error saat memanggil AI untuk RPP: {e}")
             raise Exception(f"Terjadi kesalahan saat berkomunikasi dengan AI: {e}")
 
-    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, tingkat_kesulitan):
+    # PERUBAHAN: Mengganti tingkat_kesulitan dengan taksonomi_bloom_level
+    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, taksonomi_bloom_level):
         """
         Membuat soal evaluasi dari sumber materi (RPP).
+        Parameter tingkat_kesulitan diganti dengan taksonomi_bloom_level.
         """
         prompt = f"""
     Anda adalah seorang guru ahli dalam membuat soal evaluasi yang sesuai dengan Kurikulum Merdeka dan Taksonomi Bloom.
@@ -96,7 +98,7 @@ Format RPP dalam Markdown.
     **INSTRUKSI PEMBUATAN SOAL:**
     1.  **Jenis Soal**: {jenis_soal}
     2.  **Jumlah Soal**: Buat tepat {jumlah_soal} soal.
-    3.  **Tingkat Kesulitan**: Buat soal yang sesuai dengan tingkat kognitif **{tingkat_kesulitan}** pada Taksonomi Bloom.
+    3.  **Tingkat Kognitif (Taksonomi Bloom)**: Buat soal yang sesuai dengan level **{taksonomi_bloom_level}** pada Taksonomi Bloom. Fokuslah pada aspek kognitif dari level tersebut.
     4.  **Sertakan Kunci Jawaban**: Untuk setiap soal, sertakan kunci jawabannya.
     5.  **Format Output**: Kembalikan hasilnya HANYA dalam format JSON yang valid. Jangan tambahkan teks atau penjelasan lain di luar JSON.
 

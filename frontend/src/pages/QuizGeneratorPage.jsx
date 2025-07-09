@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllRpps, generateSoalFromAI, simpanSoal, getRppById } from '../api/aiService'; // Tambah getRppById
+import { getAllRpps, generateSoalFromAI, simpanSoal, getRppById } from '../api/aiService';
 import {
     Container, Grid, Paper, Typography, Button, Box,
     TextField, Select, MenuItem, FormControl, InputLabel,
     CircularProgress, Snackbar, Alert,
-    Divider, List, ListItem, ListItemText // <-- Tambahkan impor ini
+    Divider, List, ListItem, ListItemText
 } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
@@ -18,21 +18,29 @@ function QuizGeneratorPage() {
     const [selectedRppId, setSelectedRppId] = useState('');
     const [jenisSoal, setJenisSoal] = useState('Pilihan Ganda');
     const [jumlahSoal, setJumlahSoal] = useState(5);
-    const [tingkatKesulitan, setTingkatKesulitan] = useState('Mudah');
-    const [generatedSoal, setGeneratedSoal] = useState(null); // Akan menyimpan objek JSON hasil soal
-    const [daftarRpps, setDaftarRpps] = useState([]); // Untuk dropdown RPP
+    const [taksonomiBloomLevel, setTaksonomiBloomLevel] = useState('');
+
+    const [generatedSoal, setGeneratedSoal] = useState(null);
+    const [daftarRpps, setDaftarRpps] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-    // Fetch all RPPs for the dropdown
+    const bloomLevels = [
+        'Mengingat (C1)',
+        'Memahami (C2)',
+        'Menerapkan (C3)',
+        'Menganalisis (C4)',
+        'Mengevaluasi (C5)',
+        'Mencipta (C6)'
+    ];
+
     useEffect(() => {
         const fetchRpps = async () => {
             try {
                 const rpps = await getAllRpps();
-                // Untuk dropdown, hanya perlu id, judul, nama_kelas. Konten RPP diambil saat generate soal.
-                setDaftarRpps(rpps); 
+                setDaftarRpps(rpps);
             } catch (error) {
                 console.error("Error fetching RPPs:", error);
                 showSnackbar('Gagal memuat daftar RPP.', 'error');
@@ -57,29 +65,28 @@ function QuizGeneratorPage() {
     const handleSubmitSoal = async (event) => {
         event.preventDefault();
         setIsLoading(true);
-        setGeneratedSoal(null); // Clear previous soal
+        setGeneratedSoal(null);
 
-        if (!selectedRppId || !jenisSoal || !jumlahSoal || !tingkatKesulitan) {
-            showSnackbar('Mohon lengkapi semua field.', 'warning');
+        if (!selectedRppId || !jenisSoal || !jumlahSoal || !taksonomiBloomLevel) {
+            showSnackbar('Mohon lengkapi semua field yang wajib diisi (RPP, Jenis Soal, Jumlah Soal, Taksonomi Bloom).', 'warning');
             setIsLoading(false);
             return;
         }
 
         try {
-            // Ambil konten RPP secara lengkap menggunakan getRppById
-            const rppDetail = await getRppById(selectedRppId); // Menggunakan getRppById
-            const sumberMateri = rppDetail.konten_markdown; // Ambil konten_markdown
+            // TIDAK PERLU MEMANGGIL getRppById DI SINI, CUKUP KIRIM RPP_ID SAJA
+            // const rppDetail = await getRppById(selectedRppId);
+            // const sumberMateri = rppDetail.konten_markdown;
 
             const dataToGenerate = {
-                sumber_materi: sumberMateri,
+                rpp_id: selectedRppId, // <--- PERBAIKAN PENTING: Kirim rpp_id
                 jenis_soal: jenisSoal,
                 jumlah_soal: jumlahSoal,
-                tingkat_kesulitan: tingkatKesulitan,
+                taksonomi_bloom_level: taksonomiBloomLevel,
             };
 
             const response = await generateSoalFromAI(dataToGenerate);
-            // Pastikan response.soal adalah array of objects
-            setGeneratedSoal(response); // Asumsi respons adalah objek JSON seperti {soal: [...]}
+            setGeneratedSoal(response);
             showSnackbar('Soal berhasil dibuat!', 'success');
         } catch (error) {
             console.error('Error generating Soal:', error);
@@ -98,16 +105,14 @@ function QuizGeneratorPage() {
         setIsLoading(true);
         try {
             const rppTerpilih = daftarRpps.find(rpp => rpp.id === selectedRppId);
-            const judulSoal = `Soal ${jenisSoal} ${jumlahSoal} (${tingkatKesulitan}) - ${rppTerpilih.judul}`;
+            const judulSoal = `Soal ${jenisSoal} (${taksonomiBloomLevel}) dari RPP: ${rppTerpilih.judul}`;
 
             await simpanSoal({
                 judul: judulSoal,
-                konten_json: generatedSoal, // Asumsi ini adalah objek JSON
+                konten_json: generatedSoal,
                 rpp_id: selectedRppId
             });
             showSnackbar('Set soal berhasil disimpan ke bank soal!', 'success');
-            // Opsional: navigate ke halaman detail soal atau bank soal
-            // navigate('/bank-soal');
         } catch (error) {
             console.error('Error saving Soal:', error);
             showSnackbar(error.message || 'Gagal menyimpan soal.', 'error');
@@ -124,17 +129,17 @@ function QuizGeneratorPage() {
             <Typography variant="h6" color="text.secondary" gutterBottom align="center">
                 Buat Soal Evaluasi Otomatis dari RPP dengan Bantuan AI
             </Typography>
-            <Divider sx={{ my: 4 }} /> {/* Styling Divider */}
+            <Divider sx={{ my: 4 }} />
 
             <Grid container spacing={4}>
                 {/* Kolom Kiri: Form Input Soal */}
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={3} sx={{ p: 3, borderRadius: '12px' }}> {/* Styling Paper */}
+                    <Paper elevation={3} sx={{ p: 3, borderRadius: '12px' }}>
                         <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 3 }}>
                             Detail Soal
                         </Typography>
                         <Box component="form" onSubmit={handleSubmitSoal} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <FormControl fullWidth required margin="normal"> {/* Styling FormControl */}
+                            <FormControl fullWidth required margin="normal">
                                 <InputLabel>Pilih RPP</InputLabel>
                                 <Select
                                     value={selectedRppId}
@@ -174,16 +179,18 @@ function QuizGeneratorPage() {
                                     ))}
                                 </Select>
                             </FormControl>
+                            
                             <FormControl fullWidth required margin="normal">
-                                <InputLabel>Tingkat Kesulitan</InputLabel>
+                                <InputLabel>Taksonomi Bloom</InputLabel>
                                 <Select
-                                    value={tingkatKesulitan}
-                                    label="Tingkat Kesulitan"
-                                    onChange={(e) => setTingkatKesulitan(e.target.value)}
+                                    value={taksonomiBloomLevel}
+                                    label="Taksonomi Bloom"
+                                    onChange={(e) => setTaksonomiBloomLevel(e.target.value)}
                                 >
-                                    <MenuItem value="Mudah">Mudah</MenuItem>
-                                    <MenuItem value="Sedang">Sedang</MenuItem>
-                                    <MenuItem value="Sulit">Sulit</MenuItem>
+                                    <MenuItem value="">Pilih Level Bloom</MenuItem>
+                                    {bloomLevels.map((level) => (
+                                        <MenuItem key={level} value={level}>{level}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
 
@@ -192,7 +199,6 @@ function QuizGeneratorPage() {
                                 variant="contained"
                                 endIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : <AutoFixHighIcon />}
                                 disabled={isLoading}
-                                // Styling Button
                                 sx={{ mt: 3, py: 1.5, borderRadius: '8px' }}
                             >
                                 {isLoading ? 'Membuat Soal...' : 'Buat Soal dengan AI'}
@@ -203,7 +209,7 @@ function QuizGeneratorPage() {
 
                 {/* Kolom Kanan: Hasil Soal & Aksi */}
                 <Grid item xs={12} md={6}>
-                    <Paper elevation={3} sx={{ p: 3, borderRadius: '12px', height: '100%', display: 'flex', flexDirection: 'column' }}> {/* Styling Paper */}
+                    <Paper elevation={3} sx={{ p: 3, borderRadius: '12px', height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                             <Typography variant="h5" component="h2">
                                 Hasil Soal
@@ -219,16 +225,16 @@ function QuizGeneratorPage() {
                             </Button>
                         </Box>
                         <Divider sx={{ mb: 2 }} />
-                        <Box sx={{ flexGrow: 1, minHeight: '300px', maxHeight: '70vh', overflowY: 'auto', p: 1, border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#f9f9f9' }}> {/* Styling Box */}
+                        <Box sx={{ flexGrow: 1, minHeight: '300px', maxHeight: '70vh', overflowY: 'auto', p: 1, border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
                             {isLoading ? (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                                     <CircularProgress sx={{ mb: 2 }} />
                                     <Typography color="text.secondary">AI sedang menyusun soal Anda...</Typography>
                                 </Box>
                             ) : generatedSoal ? (
-                                <List sx={{ width: '100%' }}> {/* Styling List */}
+                                <List sx={{ width: '100%' }}>
                                     {generatedSoal.soal.map((soal, index) => (
-                                        <ListItem key={index} alignItems="flex-start" sx={{ mb: 2, border: '1px solid #eee', borderRadius: '8px', p: 2 }}> {/* Styling ListItem */}
+                                        <ListItem key={index} alignItems="flex-start" sx={{ mb: 2, border: '1px solid #eee', borderRadius: '8px', p: 2 }}>
                                             <ListItemText
                                                 primary={<Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>{index + 1}. {soal.pertanyaan}</Typography>}
                                                 secondary={
@@ -261,7 +267,6 @@ function QuizGeneratorPage() {
                 </Grid>
             </Grid>
 
-            {/* Snackbar for Notifications */}
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleCloseSnackbar}>
                 <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
