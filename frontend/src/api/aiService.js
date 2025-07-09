@@ -98,6 +98,80 @@ export const getRppById = async (idRpp) => {
     }
 };
 
+// --- NEW FUNCTION: Update RPP ---
+export const updateRpp = async (idRpp, rppData) => {
+    try {
+        const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(rppData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memperbarui RPP dengan ID ${idRpp}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error updating RPP with ID ${idRpp}:`, error);
+        throw error;
+    }
+};
+
+// --- NEW FUNCTION: Delete RPP ---
+export const deleteRpp = async (idRpp) => {
+    try {
+        const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal menghapus RPP dengan ID ${idRpp}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error deleting RPP with ID ${idRpp}:`, error);
+        throw error;
+    }
+};
+
+// --- NEW FUNCTION: Download RPP PDF ---
+export const downloadRppPdf = async (idRpp, rppTitle) => {
+    try {
+        const response = await fetch(`${API_URL}/rpp/${idRpp}/pdf`, {
+            method: 'GET', // Menggunakan GET karena hanya mengambil resource
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json(); // Coba baca pesan error dari backend
+            throw new Error(errorData.message || `Gagal mengunduh RPP PDF untuk ID ${idRpp}.`);
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${rppTitle.replace(/[^a-z0-9]/gi, '_') || 'RPP'}.pdf`; // Bersihkan nama file
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url); // Bersihkan URL objek
+
+        return { message: 'RPP PDF berhasil diunduh!' };
+    } catch (error) {
+        console.error("Error downloading RPP PDF:", error);
+        throw error;
+    }
+};
+
 // --- Fungsi untuk menghasilkan soal dari AI ---
 export const generateSoalFromAI = async (data) => {
     try {

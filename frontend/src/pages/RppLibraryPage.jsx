@@ -1,91 +1,380 @@
 // frontend/src/pages/RppLibraryPage.jsx
 
-import React, { useState, useEffect } from 'react';
-import { Link as RouterLink } from 'react-router-dom'; // Menggunakan Link dari react-router-dom sebagai RouterLink
-import { getAllRpps } from '../api/aiService'; 
+import React, { useEffect, useState } from 'react';
 import {
-    Container, Box, Typography, Paper,
-    Table, TableContainer, TableHead, TableBody, TableRow, TableCell,
-    CircularProgress, // Untuk indikator loading
-    Link // Untuk styling Link dari MUI
+    Box,
+    Typography,
+    Button,
+    CircularProgress,
+    Alert,
+    Snackbar,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Paper,
+    IconButton,
+    TextField,
+    InputAdornment,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    MenuItem, // Untuk Dropdown Kelas
+    FormControl, // Untuk Dropdown Kelas
+    InputLabel, // Untuk Dropdown Kelas
+    Select // Untuk Dropdown Kelas
 } from '@mui/material';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories'; 
+import { Edit, Delete, Download, Visibility, Add, Search } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { getAllRpps, deleteRpp, updateRpp, getRppById, downloadRppPdf } from '../api/aiService';
+import { getAllKelas } from '../api/classroomService'; // Pastikan ini ada atau tambahkan di classroomService.js
 
-function RppLibraryPage() {
-    const [rppList, setRppList] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+const RppLibraryPage = () => {
+    const navigate = useNavigate();
+    const [rpps, setRpps] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+    const [currentRpp, setCurrentRpp] = useState(null);
+    const [editForm, setEditForm] = useState({ judul: '', kelas_id: '' });
+    const [kelasList, setKelasList] = useState([]); // State untuk daftar kelas
 
     useEffect(() => {
-        const muatData = async () => {
-            try {
-                const data = await getAllRpps();
-                setRppList(data);
-            } catch (error) {
-                console.error("Gagal memuat RPP:", error);
-                // Opsional: tampilkan snackbar error
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        muatData();
+        fetchRppsAndKelas();
     }, []);
 
+    const fetchRppsAndKelas = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [rppsData, kelasData] = await Promise.all([
+                getAllRpps(),
+                getAllKelas() // Ambil daftar kelas
+            ]);
+            setRpps(rppsData);
+            setKelasList(kelasData);
+        } catch (err) {
+            setError(err.message);
+            setSnackbarMessage(`Error: ${err.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
+
+    const handleSearchChange = (event) => {
+        setSearchTerm(event.target.value);
+    };
+
+    const filteredRpps = rpps.filter(rpp =>
+        rpp.judul.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rpp.nama_kelas.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // --- Edit RPP Handlers ---
+    const handleEditClick = async (rppId) => {
+        try {
+            const rppDetail = await getRppById(rppId);
+            setCurrentRpp(rppDetail);
+            setEditForm({ judul: rppDetail.judul, kelas_id: rppDetail.kelas_id });
+            setOpenEditDialog(true);
+        } catch (err) {
+            setSnackbarMessage(`Gagal memuat detail RPP: ${err.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleEditDialogClose = () => {
+        setOpenEditDialog(false);
+        setCurrentRpp(null);
+        setEditForm({ judul: '', kelas_id: '' });
+    };
+
+    const handleEditFormChange = (event) => {
+        setEditForm({ ...editForm, [event.target.name]: event.target.value });
+    };
+
+    const handleEditSubmit = async () => {
+        if (!currentRpp) return;
+        setLoading(true);
+        try {
+            // Kita hanya akan mengizinkan edit judul dan kelas_id dari sini.
+            // Konten markdown RPP sebaiknya diubah melalui generator RPP.
+            const updatedData = {
+                judul: editForm.judul,
+                kelas_id: editForm.kelas_id,
+                konten_markdown: currentRpp.konten_markdown // Pertahankan konten markdown asli
+            };
+            await updateRpp(currentRpp.id, updatedData);
+            setSnackbarMessage('RPP berhasil diperbarui!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            handleEditDialogClose();
+            fetchRppsAndKelas(); // Refresh daftar RPP
+        } catch (err) {
+            setSnackbarMessage(`Gagal memperbarui RPP: ${err.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- Delete RPP Handlers ---
+    const handleDeleteClick = (rppId) => {
+        setCurrentRpp(rpps.find(r => r.id === rppId));
+        setOpenDeleteDialog(true);
+    };
+
+    const handleDeleteDialogClose = () => {
+        setOpenDeleteDialog(false);
+        setCurrentRpp(null);
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!currentRpp) return;
+        setLoading(true);
+        try {
+            await deleteRpp(currentRpp.id);
+            setSnackbarMessage('RPP berhasil dihapus!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            handleDeleteDialogClose();
+            fetchRppsAndKelas(); // Refresh daftar RPP
+        } catch (err) {
+            setSnackbarMessage(`Gagal menghapus RPP: ${err.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- Download RPP PDF Handler ---
+    const handleDownloadPdf = async (rppId, rppTitle) => {
+        setLoading(true);
+        try {
+            await downloadRppPdf(rppId, rppTitle);
+            setSnackbarMessage('RPP PDF berhasil diunduh!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            setSnackbarMessage(`Gagal mengunduh RPP PDF: ${err.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-            <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                <AutoStoriesIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 'inherit' }} /> Pustaka RPP
-            </Typography>
-            <Typography variant="h6" color="text.secondary" gutterBottom align="center" sx={{ mb: 4 }}>
-                Berikut adalah daftar semua RPP yang pernah Anda simpan.
+        <Box sx={{ p: 3 }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+                Perpustakaan RPP
             </Typography>
 
-            <Paper elevation={3} sx={{ p: 3, borderRadius: '12px', overflow: 'hidden' }}> {/* Menggunakan Paper untuk card */}
-                {isLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
-                        <CircularProgress />
-                        <Typography sx={{ ml: 2, color: 'text.secondary' }}>Memuat perpustakaan RPP...</Typography>
-                    </Box>
-                ) : rppList.length > 0 ? (
-                    <TableContainer>
-                        <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                            <TableHead sx={{ backgroundColor: 'action.hover' }}> {/* Styling header tabel */}
-                                <TableRow>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Judul RPP</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Kelas Terkait</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Tanggal Dibuat</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {rppList.map((rpp) => (
-                                    <TableRow
-                                        key={rpp.id}
-                                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                                    >
-                                        <TableCell component="th" scope="row">
-                                            <Link component={RouterLink} to={`/rpp/${rpp.id}`} sx={{ textDecoration: 'none', color: 'primary.main', fontWeight: 'medium' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3, gap: 2 }}>
+                <TextField
+                    label="Cari RPP"
+                    variant="outlined"
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    sx={{ flexGrow: 1 }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <Search />
+                            </InputAdornment>
+                        ),
+                    }}
+                />
+                <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<Add />}
+                    onClick={() => navigate('/rpp-generator')}
+                >
+                    Buat RPP Baru
+                </Button>
+            </Box>
+
+            {loading && (
+                <Box display="flex" justifyContent="center" alignItems="center" height="200px">
+                    <CircularProgress />
+                    <Typography variant="h6" sx={{ ml: 2 }}>Memuat RPP...</Typography>
+                </Box>
+            )}
+
+            {error && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                    {error}
+                </Alert>
+            )}
+
+            {!loading && !error && filteredRpps.length === 0 && (
+                <Alert severity="info">Tidak ada RPP ditemukan. Silakan buat RPP baru.</Alert>
+            )}
+
+            {!loading && !error && filteredRpps.length > 0 && (
+                <TableContainer component={Paper}>
+                    <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Judul RPP</TableCell>
+                                <TableCell>Kelas</TableCell>
+                                <TableCell>Tanggal Dibuat</TableCell>
+                                <TableCell align="right">Aksi</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredRpps.map((rpp) => (
+                                <TableRow
+                                    key={rpp.id}
+                                    sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                                >
+                                    <TableCell component="th" scope="row">
+                                        <Button
+                                            variant="text"
+                                            onClick={() => navigate(`/rpp/${rpp.id}`)}
+                                            sx={{ textTransform: 'none', justifyContent: 'flex-start', p: 0 }}
+                                        >
+                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
                                                 {rpp.judul}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell>{rpp.nama_kelas}</TableCell>
-                                        <TableCell>{rpp.tanggal_dibuat}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                ) : (
-                    <Box sx={{ p: 5, textAlign: 'center' }}>
-                        <Typography variant="h6" color="text.secondary">
-                            Perpustakaan RPP masih kosong.
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                            Silakan buat RPP baru dari halaman "Generator RPP".
-                        </Typography>
-                    </Box>
-                )}
-            </Paper>
-        </Container>
+                                            </Typography>
+                                        </Button>
+                                    </TableCell>
+                                    <TableCell>{rpp.nama_kelas}</TableCell>
+                                    <TableCell>{rpp.tanggal_dibuat}</TableCell>
+                                    <TableCell align="right">
+                                        <IconButton
+                                            aria-label="view"
+                                            onClick={() => navigate(`/rpp/${rpp.id}`)}
+                                            color="info"
+                                        >
+                                            <Visibility />
+                                        </IconButton>
+                                        <IconButton
+                                            aria-label="edit"
+                                            onClick={() => handleEditClick(rpp.id)}
+                                            color="primary"
+                                        >
+                                            <Edit />
+                                        </IconButton>
+                                        <IconButton
+                                            aria-label="delete"
+                                            onClick={() => handleDeleteClick(rpp.id)}
+                                            color="error"
+                                        >
+                                            <Delete />
+                                        </IconButton>
+                                        <IconButton
+                                            aria-label="download"
+                                            onClick={() => handleDownloadPdf(rpp.id, rpp.judul)}
+                                            color="success"
+                                        >
+                                            <Download />
+                                        </IconButton>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
+
+            {/* Edit RPP Dialog */}
+            <Dialog open={openEditDialog} onClose={handleEditDialogClose}>
+                <DialogTitle>Edit RPP</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        name="judul"
+                        label="Judul RPP"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={editForm.judul}
+                        onChange={handleEditFormChange}
+                        sx={{ mb: 2 }}
+                    />
+                    <FormControl fullWidth variant="outlined">
+                        <InputLabel id="kelas-select-label">Kelas</InputLabel>
+                        <Select
+                            labelId="kelas-select-label"
+                            name="kelas_id"
+                            value={editForm.kelas_id}
+                            onChange={handleEditFormChange}
+                            label="Kelas"
+                        >
+                            {kelasList.map((kelas) => (
+                                <MenuItem key={kelas.id} value={kelas.id}>
+                                    {kelas.nama_kelas}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
+                        *Untuk mengubah konten RPP, gunakan fitur "Buat RPP Baru" atau edit secara manual di halaman detail RPP jika memungkinkan.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleEditDialogClose} color="secondary">
+                        Batal
+                    </Button>
+                    <Button onClick={handleEditSubmit} color="primary" disabled={loading}>
+                        {loading ? <CircularProgress size={24} /> : 'Simpan'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Delete RPP Confirmation Dialog */}
+            <Dialog
+                open={openDeleteDialog}
+                onClose={handleDeleteDialogClose}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
+            >
+                <DialogTitle id="alert-dialog-title">{"Konfirmasi Hapus RPP"}</DialogTitle>
+                <DialogContent>
+                    <Typography id="alert-dialog-description">
+                        Apakah Anda yakin ingin menghapus RPP "{currentRpp?.judul}"? Tindakan ini tidak dapat dibatalkan.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleDeleteDialogClose} color="secondary">
+                        Batal
+                    </Button>
+                    <Button onClick={handleDeleteConfirm} color="error" autoFocus disabled={loading}>
+                        {loading ? <CircularProgress size={24} /> : 'Hapus'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Box>
     );
-}
+};
 
 export default RppLibraryPage;

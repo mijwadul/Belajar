@@ -112,6 +112,71 @@ def lihat_satu_rpp(id_rpp):
         'nama_kelas': rpp.kelas.nama_kelas
     })
 
+@bp.route('/rpp/<int:id_rpp>/pdf', methods=['GET']) # Menggunakan GET karena hanya mengambil resource
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def generate_rpp_pdf_endpoint(id_rpp):
+    rpp = RPP.query.get_or_404(id_rpp)
+    rpp_title = rpp.judul
+    rpp_content_markdown = rpp.konten_markdown
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.multi_cell(0, 10, rpp_title, 0, 'C')
+    pdf.ln(10)
+
+    pdf.set_font("Arial", "", 12)
+    
+    # Mengonversi Markdown ke teks sederhana untuk PDF
+    # Ini adalah konversi dasar, untuk rendering Markdown yang lebih kompleks di PDF
+    # mungkin memerlukan pustaka yang lebih canggih atau konversi HTML.
+    # Untuk saat ini, kita akan mengganti header markdown dengan font bold
+    # dan menangani baris baru.
+    
+    # Memisahkan konten per baris
+    lines = rpp_content_markdown.split('\n')
+    
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line.startswith('## '):
+            pdf.set_font("Arial", "B", 14) # Sub-heading
+            pdf.multi_cell(0, 8, stripped_line[3:])
+            pdf.ln(2)
+        elif stripped_line.startswith('# '):
+            pdf.set_font("Arial", "B", 16) # Main heading
+            pdf.multi_cell(0, 10, stripped_line[2:])
+            pdf.ln(5)
+        else:
+            pdf.set_font("Arial", "", 12) # Normal text
+            pdf.multi_cell(0, 7, stripped_line)
+            if stripped_line: # Hanya tambahkan spasi jika baris tidak kosong
+                pdf.ln(2) # Spasi antar baris
+    
+    temp_dir = os.path.join(current_app.root_path, 'temp_files')
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    unique_filename = f"rpp_{uuid.uuid4()}.pdf"
+    output_path = os.path.join(temp_dir, unique_filename)
+    
+    try:
+        pdf.output(output_path)
+    except Exception as e:
+        print(f"Error creating RPP PDF: {e}")
+        current_app.logger.error("Error creating RPP PDF", exc_info=True)
+        return jsonify({'message': f'Gagal membuat file PDF RPP: {e}'}), 500
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(output_path)
+        except Exception as e:
+            current_app.logger.error(f"Error removing temporary RPP PDF file: {e}")
+        return response
+
+    return send_file(output_path, as_attachment=True, download_name=f"{rpp_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+
 # --- RUTE UNTUK SOAL ---
 
 @bp.route('/generate-soal', methods=['POST'])

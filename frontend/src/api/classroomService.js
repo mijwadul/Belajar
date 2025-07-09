@@ -313,3 +313,21 @@ export const getAbsensi = async (idKelas, tanggal) => {
         throw error;
     }
 };
+
+export const getAllKelas = async () => {
+    try {
+        const response = await fetch(`${API_URL}/kelas`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat daftar kelas');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching all Kelas:", error);
+        throw error;
+    }
+};
