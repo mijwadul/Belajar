@@ -15,7 +15,7 @@ export const getKelas = async (searchQuery = '', jenjang = '', mataPelajaran = '
             params.append('jenjang', jenjang);
         }
         if (mataPelajaran) {
-            params.append('mata_pelajaran', mataPelajaran); // Sesuaikan dengan nama parameter di backend Anda
+            params.append('mata_pelajaran', mataPelajaran);
         }
 
         const queryString = params.toString();
@@ -76,7 +76,6 @@ export const getKelasDetail = async (idKelas) => {
     }
 };
 
-// --- NEW: Fungsi untuk memperbarui kelas ---
 export const updateKelas = async (idKelas, kelasData) => {
     try {
         const response = await fetch(`${API_URL}/kelas/${idKelas}`, {
@@ -98,7 +97,6 @@ export const updateKelas = async (idKelas, kelasData) => {
     }
 };
 
-// --- NEW: Fungsi untuk menghapus kelas ---
 export const deleteKelas = async (idKelas) => {
     try {
         const response = await fetch(`${API_URL}/kelas/${idKelas}`, {
@@ -117,7 +115,6 @@ export const deleteKelas = async (idKelas) => {
         throw error;
     }
 };
-
 
 // --- Siswa ---
 export const tambahSiswa = async (siswaData) => {
@@ -202,6 +199,81 @@ export const deleteSiswa = async (idSiswa) => {
     }
 };
 
+// --- NEW: BULK IMPORT SISWA ---
+export const bulkImportSiswa = async (kelasId, studentsData) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${kelasId}/siswa/bulk-import`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(studentsData)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || 'Gagal mengimpor siswa massal');
+        }
+        return data;
+    } catch (error) {
+        console.error("Error bulk importing students:", error);
+        throw error;
+    }
+};
+
+// --- Fungsi untuk mendapatkan siswa di kelas tertentu dengan pencarian dan filter ---
+export const getSiswaByKelas = async (idKelas, searchQuery = '', jenisKelamin = '', agama = '') => {
+    try {
+        const params = new URLSearchParams();
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        if (jenisKelamin) {
+            params.append('jenis_kelamin', jenisKelamin);
+        }
+        if (agama) {
+            params.append('agama', agama);
+        }
+
+        const queryString = params.toString();
+        const url = `${API_URL}/kelas/${idKelas}/siswa${queryString ? `?${queryString}` : ''}`;
+
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memuat siswa untuk kelas ID ${idKelas}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching students for class ID ${idKelas}:`, error);
+        throw error;
+    }
+};
+
+// --- NEW: Fungsi untuk mendapatkan jumlah total siswa (GLOBAL) ---
+export const getSiswaTotalCount = async () => {
+    try {
+        const response = await fetch(`${API_URL}/students/total_count`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat total siswa');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching total students count:", error);
+        throw error;
+    }
+};
+
 // --- Absensi ---
 export const catatAbsensi = async (idKelas, absensiData) => {
     try {
@@ -238,63 +310,6 @@ export const getAbsensi = async (idKelas, tanggal) => {
         return await response.json();
     } catch (error) {
         console.error("Error fetching attendance:", error);
-        throw error;
-    }
-};
-
-// --- NEW: BULK IMPORT SISWA ---
-export const bulkImportSiswa = async (kelasId, studentsData) => {
-    try {
-        const response = await fetch(`${API_URL}/kelas/${kelasId}/siswa/bulk-import`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': getAuthHeader()
-            },
-            body: JSON.stringify(studentsData)
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            // Handle specific backend error messages
-            throw new Error(data.message || 'Gagal mengimpor siswa massal');
-        }
-        return data; // Mengembalikan pesan sukses, success_count, fail_count, dll.
-    } catch (error) {
-        console.error("Error bulk importing students:", error);
-        throw error;
-    }
-};
-
-// --- Fungsi untuk mendapatkan siswa di kelas tertentu dengan pencarian dan filter ---
-export const getSiswaByKelas = async (idKelas, searchQuery = '', jenisKelamin = '', agama = '') => {
-    try {
-        const params = new URLSearchParams();
-        if (searchQuery) {
-            params.append('search', searchQuery);
-        }
-        if (jenisKelamin) {
-            params.append('jenis_kelamin', jenisKelamin);
-        }
-        if (agama) {
-            params.append('agama', agama);
-        }
-
-        const queryString = params.toString();
-        const url = `${API_URL}/kelas/${idKelas}/siswa${queryString ? `?${queryString}` : ''}`;
-
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': getAuthHeader()
-            }
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `Gagal memuat siswa untuk kelas ID ${idKelas}`);
-        }
-        return await response.json();
-    } catch (error) {
-        console.error(`Error fetching students for class ID ${idKelas}:`, error);
         throw error;
     }
 };

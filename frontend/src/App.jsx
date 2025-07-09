@@ -1,9 +1,9 @@
 // frontend/src/App.jsx
 
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link as RouterLink } from 'react-router-dom'; // Tambah Link as RouterLink
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, Container, Box, Typography } from '@mui/material'; // Tambah Typography
+import { CssBaseline, Container, Box, Typography, Button } from '@mui/material'; // Tambah Button
 
 // Import Tema dan Komponen Layout
 import theme from './theme';
@@ -13,8 +13,6 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import RoleBasedProtectedRoute from './components/auth/RoleBasedProtectedRoute';
 
 // Import Semua Halaman
-import UserManagementPage from './pages/admin/UserManagementPage';
-import EditUserPage from './pages/admin/EditUserPage'; // Pastikan Anda memiliki file ini
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
@@ -28,34 +26,41 @@ import QuizGeneratorPage from './pages/QuizGeneratorPage';
 import BankSoalPage from './pages/BankSoalPage';
 import SoalDetailPage from './pages/SoalDetailPage';
 
-// Placeholder untuk halaman Admin, jika belum ada komponen sebenarnya
-const AdminDashboard = () => <Typography variant="h4">Admin Dashboard (Coming Soon)</Typography>;
+// Import komponen baru (DashboardPage)
+import DashboardPage from './pages/DashboardPage';
+
+// Import komponen admin dengan path yang benar
+import UserManagementPage from './pages/admin/UserManagementPage'; // Path yang benar
+import EditUserPage from './pages/admin/EditUserPage'; // Path yang benar
+
+// --- DEFERRED: Import ExamGeneratorPage akan dilakukan setelah file dibuat ---
+// import ExamGeneratorPage from './pages/ExamGeneratorPage';
 
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <Router>
-        {/* Box utama untuk layout flexbox agar footer menempel di bawah */}
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <CssBaseline />
           <Navbar />
           
-          {/* Container utama untuk konten halaman */}
           <Container component="main" sx={{ mt: 4, mb: 4, flexGrow: 1 }}>
             <Routes>
               {/* === Rute Publik (Bisa diakses semua orang) === */}
-              <Route path="/" element={<LandingPage />} />
+              <Route path="/" element={<Navigate to="/login" replace />} /> {/* Redirect root ke login */}
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/login" element={<LoginPage />} />
 
               {/* === Rute Terproteksi (Hanya untuk yang sudah login) === */}
               <Route element={<ProtectedRoute />}>
+                {/* Rute baru untuk Dashboard */}
+                <Route path="/dashboard" element={<DashboardPage />} />
+
                 {/* Rute untuk semua peran yang sudah login (Guru, Admin, dll.) */}
                 <Route path="/kelas" element={<ClassListPage />} />
-                {/* PERBAIKAN: Rute /kelas/:id sekarang langsung ke StudentManagementPage lagi */}
                 <Route path="/kelas/:id" element={<StudentManagementPage />} /> 
-                <Route path="/kelas/:id/absensi" element={<AttendancePage />} /> {/* Rute Absensi tetap konsisten */}
+                <Route path="/kelas/:id/absensi" element={<AttendancePage />} />
                 
                 <Route path="/generator-rpp" element={<RppGeneratorPage />} />
                 <Route path="/perpustakaan-rpp" element={<RppLibraryPage />} />
@@ -64,17 +69,59 @@ function App() {
                 <Route path="/bank-soal" element={<BankSoalPage />} />
                 <Route path="/soal/:id" element={<SoalDetailPage />} />
 
+                {/* --- DEFERRED: Rute ExamGeneratorPage akan dilakukan setelah file dibuat --- */}
+                {/* <Route path="/exam-generator" element={<ExamGeneratorPage />} /> */}
+
                 {/* Rute Admin (dilindungi peran) */}
                 <Route element={<RoleBasedProtectedRoute allowedRoles={['Admin', 'Super User']} />}>
                   {/* Rute /admin/dashboard akan mengarah ke UserManagementPage */}
                   <Route path="/admin/dashboard" element={<UserManagementPage />} />
-                  {/* Rute untuk mengedit user */}
                   <Route path="/admin/users/:id" element={<EditUserPage />} /> 
                 </Route>
+
+                {/* Rute placeholder untuk halaman Penilaian */}
+                <Route path="/penilaian" element={
+                    <Box sx={{ p: 4, textAlign: 'center', mt: 8 }}>
+                        <Typography variant="h4" color="text.primary" gutterBottom>
+                            Halaman Penilaian
+                        </Typography>
+                        <Typography variant="h6" color="text.secondary">
+                            Fitur ini akan segera hadir!
+                        </Typography>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            component={RouterLink}
+                            to="/dashboard"
+                            sx={{ mt: 3 }}
+                        >
+                            Kembali ke Dashboard
+                        </Button>
+                    </Box>
+                } />
+
               </Route>
 
               {/* Rute fallback untuk halaman tidak ditemukan */}
-              <Route path="*" element={<Typography variant="h4" sx={{ textAlign: 'center', mt: 5 }}>404 - Halaman Tidak Ditemukan</Typography>} />
+              <Route path="*" element={
+                <Box sx={{ p: 4, textAlign: 'center', mt: 8 }}>
+                    <Typography variant="h4" color="text.primary" gutterBottom>
+                        404 - Halaman Tidak Ditemukan
+                    </Typography>
+                    <Typography variant="h6" color="text.secondary">
+                        Maaf, halaman yang Anda cari tidak ada.
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        component={RouterLink}
+                        to="/dashboard"
+                        sx={{ mt: 3 }}
+                    >
+                        Kembali ke Dashboard
+                    </Button>
+                </Box>
+              } />
             </Routes>
           </Container>
           

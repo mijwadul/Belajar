@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom'; // Menggunakan Link dari react-router-dom sebagai RouterLink
-import { getAllRpps } from '../api/aiService'; // Memastikan fungsi ini ada dan diimpor
+import { getAllRpps } from '../api/aiService'; 
 import {
     Container, Box, Typography, Paper,
     Table, TableContainer, TableHead, TableBody, TableRow, TableCell,
     CircularProgress, // Untuk indikator loading
     Link // Untuk styling Link dari MUI
 } from '@mui/material';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories'; // Ikon untuk perpustakaan RPP
+import AutoStoriesIcon from '@mui/icons-material/AutoStories'; 
 
 function RppLibraryPage() {
     const [rppList, setRppList] = useState([]);
@@ -33,7 +33,7 @@ function RppLibraryPage() {
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                <AutoStoriesIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 'inherit' }} /> Perpustakaan RPP
+                <AutoStoriesIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 'inherit' }} /> Pustaka RPP
             </Typography>
             <Typography variant="h6" color="text.secondary" gutterBottom align="center" sx={{ mb: 4 }}>
                 Berikut adalah daftar semua RPP yang pernah Anda simpan.

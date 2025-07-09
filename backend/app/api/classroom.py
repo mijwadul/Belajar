@@ -2,10 +2,10 @@
 
 from flask import Blueprint, request, jsonify
 from datetime import date
-from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa
-from app import db
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.api.auth import roles_required
+from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa #
+from app import db #
+from flask_jwt_extended import jwt_required, get_jwt_identity #
+from app.api.auth import roles_required #
 from sqlalchemy.exc import IntegrityError
 
 bp = Blueprint('classroom_api', __name__, url_prefix='/api')
@@ -45,14 +45,18 @@ def lihat_semua_kelas():
     
     hasil = []
     for kelas in semua_kelas:
+        # Tambahkan jumlah siswa untuk setiap kelas
+        # Ini akan membutuhkan kueri tambahan per kelas, atau join yang dioptimalkan jika memungkinkan
+        # Untuk kesederhanaan, kita bisa menghitung langsung dari relasi `kelas.siswa` jika `lazy='subquery'` atau `lazy='dynamic'`
+        # atau melakukan kueri terpisah jika tidak memuat relasi secara eager
+        jumlah_siswa_di_kelas = len(kelas.siswa) # Mengambil jumlah siswa dari relasi Many-to-Many
         data_kelas = {
             'id': kelas.id,
             'nama_kelas': kelas.nama_kelas,
             'jenjang': kelas.jenjang,
             'mata_pelajaran': kelas.mata_pelajaran,
-            'tahun_ajaran': kelas.tahun_ajaran
-            # Anda mungkin tidak ingin memuat semua siswa di sini untuk setiap kelas demi performa
-            # 'siswa_count': len(kelas.siswa) # Contoh untuk menampilkan jumlah siswa
+            'tahun_ajaran': kelas.tahun_ajaran,
+            'jumlah_siswa': jumlah_siswa_di_kelas # Menambahkan data jumlah siswa per kelas
         }
         hasil.append(data_kelas)
     return jsonify(hasil)
@@ -204,6 +208,14 @@ def lihat_siswa_di_kelas(id_kelas):
     
     return jsonify(hasil_siswa)
 
+# --- NEW: Endpoint untuk mendapatkan jumlah total siswa ---
+@bp.route('/students/total_count', methods=['GET'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def get_total_students_count():
+    total_students = db.session.query(Siswa).count()
+    return jsonify({'total_students': total_students}), 200
+
 # --- FUNGSI UNTUK BULK IMPORT SISWA ---
 @bp.route('/kelas/<int:kelas_id>/siswa/bulk-import', methods=['POST'])
 @jwt_required()
@@ -265,7 +277,7 @@ def bulk_import_siswa(kelas_id):
                         tanggal_lahir_obj = date.fromisoformat(tanggal_lahir_str)
                 except ValueError:
                     fail_count += 1
-                    errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena format Tanggal Lahir salah: '{tanggal_lahir_str or 'kosong'}' (harus YYYY-MM-DD).")
+                    errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena format Tanggal Lahir salah: '{tanggal_lahir_str or 'kosong'}' (harus GAAP-MM-DD).")
                     sub_transaction.rollback()
                     continue
 
@@ -360,7 +372,7 @@ def lihat_absensi(id_kelas):
     try:
         tanggal_obj = date.fromisoformat(tanggal_str)
     except ValueError:
-        return jsonify({'message': 'Format tanggal tidak valid. Gunakan YYYY-MM-DD.'}), 400
+        return jsonify({'message': 'Format tanggal tidak valid. Gunakan GAAP-MM-DD.'}), 400
     
     catatan_absensi = db.session.query(Absensi, Siswa.nama_lengkap).join(
         Siswa, Absensi.siswa_id == Siswa.id
