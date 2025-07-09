@@ -1,13 +1,27 @@
 // frontend/src/api/classroomService.js
 
-import { getAuthHeader } from './authService'; // Pastikan ini diimpor
+import { getAuthHeader } from './authService';
 
-const API_URL = 'http://localhost:5000/api'; // Sesuaikan jika API Anda berjalan di port atau domain lain
+const API_URL = 'http://localhost:5000/api';
 
 // --- Kelas ---
-export const getKelas = async () => {
+export const getKelas = async (searchQuery = '', jenjang = '', mataPelajaran = '') => {
     try {
-        const response = await fetch(`${API_URL}/kelas`, {
+        const params = new URLSearchParams();
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        if (jenjang) {
+            params.append('jenjang', jenjang);
+        }
+        if (mataPelajaran) {
+            params.append('mata_pelajaran', mataPelajaran); // Sesuaikan dengan nama parameter di backend Anda
+        }
+
+        const queryString = params.toString();
+        const url = `${API_URL}/kelas${queryString ? `?${queryString}` : ''}`;
+
+        const response = await fetch(url, {
             headers: {
                 'Authorization': getAuthHeader()
             }
@@ -61,6 +75,49 @@ export const getKelasDetail = async (idKelas) => {
         throw error;
     }
 };
+
+// --- NEW: Fungsi untuk memperbarui kelas ---
+export const updateKelas = async (idKelas, kelasData) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(kelasData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memperbarui kelas ID ${idKelas}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error updating class ID ${idKelas}:`, error);
+        throw error;
+    }
+};
+
+// --- NEW: Fungsi untuk menghapus kelas ---
+export const deleteKelas = async (idKelas) => {
+    try {
+        const response = await fetch(`${API_URL}/kelas/${idKelas}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal menghapus kelas ID ${idKelas}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error deleting class ID ${idKelas}:`, error);
+        throw error;
+    }
+};
+
 
 // --- Siswa ---
 export const tambahSiswa = async (siswaData) => {
@@ -205,6 +262,39 @@ export const bulkImportSiswa = async (kelasId, studentsData) => {
         return data; // Mengembalikan pesan sukses, success_count, fail_count, dll.
     } catch (error) {
         console.error("Error bulk importing students:", error);
+        throw error;
+    }
+};
+
+// --- Fungsi untuk mendapatkan siswa di kelas tertentu dengan pencarian dan filter ---
+export const getSiswaByKelas = async (idKelas, searchQuery = '', jenisKelamin = '', agama = '') => {
+    try {
+        const params = new URLSearchParams();
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        if (jenisKelamin) {
+            params.append('jenis_kelamin', jenisKelamin);
+        }
+        if (agama) {
+            params.append('agama', agama);
+        }
+
+        const queryString = params.toString();
+        const url = `${API_URL}/kelas/${idKelas}/siswa${queryString ? `?${queryString}` : ''}`;
+
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memuat siswa untuk kelas ID ${idKelas}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching students for class ID ${idKelas}:`, error);
         throw error;
     }
 };

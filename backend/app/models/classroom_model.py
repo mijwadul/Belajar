@@ -20,6 +20,28 @@ class Kelas(db.Model):
 
     def __repr__(self):
         return f'<Kelas {self.nama_kelas}>'
+    
+    @classmethod
+    def get_filtered_classes(cls, search_query=None, jenjang_filter=None, mata_pelajaran_filter=None):
+        """
+        Mengambil daftar kelas dengan kemampuan pencarian dan filter.
+        """
+        query = cls.query
+
+        if search_query:
+            # Mencari berdasarkan nama_kelas atau mata_pelajaran (case-insensitive)
+            query = query.filter(
+                (cls.nama_kelas.ilike(f'%{search_query}%')) |
+                (cls.mata_pelajaran.ilike(f'%{search_query}%'))
+            )
+        
+        if jenjang_filter:
+            query = query.filter(cls.jenjang == jenjang_filter)
+
+        if mata_pelajaran_filter:
+            query = query.filter(cls.mata_pelajaran.ilike(f'%{mata_pelajaran_filter}%')) # Menggunakan ilike untuk pencarian mata pelajaran yang lebih fleksibel
+
+        return query.order_by(cls.nama_kelas).all()
 
 class Siswa(db.Model):
     __tablename__ = 'siswa'
@@ -38,6 +60,25 @@ class Siswa(db.Model):
 
     def __repr__(self):
         return f'<Siswa {self.nama_lengkap}>'
+    
+    @classmethod
+    def get_filtered_students_in_class(cls, kelas_id, search_query=None, jenis_kelamin_filter=None, agama_filter=None):
+        """
+        Mengambil daftar siswa untuk kelas tertentu dengan kemampuan pencarian dan filter.
+        """     
+        query = cls.query.join(kelas_siswa).join(Kelas).filter(Kelas.id == kelas_id)
+
+        if search_query:
+            # Mencari berdasarkan nama_lengkap (case-insensitive)
+            query = query.filter(cls.nama_lengkap.ilike(f'%{search_query}%'))
+        
+        if jenis_kelamin_filter:
+            query = query.filter(cls.jenis_kelamin == jenis_kelamin_filter)
+
+        if agama_filter:
+            query = query.filter(cls.agama == agama_filter)
+
+        return query.order_by(cls.nama_lengkap).all()
 
 class Absensi(db.Model):
     __tablename__ = 'absensi'

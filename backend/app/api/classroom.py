@@ -31,8 +31,18 @@ def tambah_kelas():
 
 @bp.route('/kelas', methods=['GET'])
 @jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_semua_kelas():
-    semua_kelas = Kelas.query.order_by(Kelas.id).all()
+    search_query = request.args.get('search', None)
+    jenjang_filter = request.args.get('jenjang', None)
+    mata_pelajaran_filter = request.args.get('mata_pelajaran', None)
+
+    semua_kelas = Kelas.get_filtered_classes(
+        search_query=search_query,
+        jenjang_filter=jenjang_filter,
+        mata_pelajaran_filter=mata_pelajaran_filter
+    )
+    
     hasil = []
     for kelas in semua_kelas:
         data_kelas = {
@@ -41,39 +51,77 @@ def lihat_semua_kelas():
             'jenjang': kelas.jenjang,
             'mata_pelajaran': kelas.mata_pelajaran,
             'tahun_ajaran': kelas.tahun_ajaran
+            # Anda mungkin tidak ingin memuat semua siswa di sini untuk setiap kelas demi performa
+            # 'siswa_count': len(kelas.siswa) # Contoh untuk menampilkan jumlah siswa
         }
         hasil.append(data_kelas)
     return jsonify(hasil)
 
-@bp.route('/kelas/<int:id_kelas>', methods=['GET'])
-@jwt_required()
-def lihat_satu_kelas(id_kelas):
-    kelas = Kelas.query.get_or_404(id_kelas)
-    siswa_di_kelas = []
-    for siswa_obj in kelas.siswa:
-        siswa_di_kelas.append({
-            'id': siswa_obj.id,
-            'nama_lengkap': siswa_obj.nama_lengkap,
-            'nis': siswa_obj.nis,
-            'nisn': siswa_obj.nisn,
-            'tempat_lahir': siswa_obj.tempat_lahir,
-            'tanggal_lahir': siswa_obj.tanggal_lahir.isoformat() if siswa_obj.tanggal_lahir else None,
-            'jenis_kelamin': siswa_obj.jenis_kelamin,
-            'agama': siswa_obj.agama,
-            'alamat': siswa_obj.alamat,
-            'nomor_hp': siswa_obj.nomor_hp
-        })
-    respons_kelas = {
-        'id': kelas.id,
-        'nama_kelas': kelas.nama_kelas,
-        'jenjang': kelas.jenjang,
-        'mata_pelajaran': kelas.mata_pelajaran,
-        'tahun_ajaran': kelas.tahun_ajaran,
-        'siswa': siswa_di_kelas
-    }
-    return jsonify(respons_kelas)
 
-# --- FUNGSI UNTUK SISWA ---
+# --- FUNGSI UNTUK MENGELOLA SATU KELAS (GET, PUT, DELETE) ---
+@bp.route('/kelas/<int:id_kelas>', methods=['GET', 'PUT', 'DELETE'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def kelola_satu_kelas(id_kelas):
+    kelas = Kelas.query.get_or_404(id_kelas)
+
+    if request.method == 'GET':
+        siswa_di_kelas = []
+        for siswa_obj in kelas.siswa:
+            siswa_di_kelas.append({
+                'id': siswa_obj.id,
+                'nama_lengkap': siswa_obj.nama_lengkap,
+                'nis': siswa_obj.nis,
+                'nisn': siswa_obj.nisn,
+                'tempat_lahir': siswa_obj.tempat_lahir,
+                'tanggal_lahir': siswa_obj.tanggal_lahir.isoformat() if siswa_obj.tanggal_lahir else None,
+                'jenis_kelamin': siswa_obj.jenis_kelamin,
+                'agama': siswa_obj.agama,
+                'alamat': siswa_obj.alamat,
+                'nomor_hp': siswa_obj.nomor_hp
+            })
+        respons_kelas = {
+            'id': kelas.id,
+            'nama_kelas': kelas.nama_kelas,
+            'jenjang': kelas.jenjang,
+            'mata_pelajaran': kelas.mata_pelajaran,
+            'tahun_ajaran': kelas.tahun_ajaran,
+            'siswa': siswa_di_kelas # Ini akan memuat semua siswa untuk detail kelas
+        }
+        return jsonify(respons_kelas)
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'Data tidak ditemukan'}), 400
+
+        kelas.nama_kelas = data.get('nama_kelas', kelas.nama_kelas)
+        kelas.jenjang = data.get('jenjang', kelas.jenjang)
+        kelas.mata_pelajaran = data.get('mata_pelajaran', kelas.mata_pelajaran)
+        kelas.tahun_ajaran = data.get('tahun_ajaran', kelas.tahun_ajaran)
+        
+        try:
+            db.session.commit()
+            return jsonify({'message': f'Kelas "{kelas.nama_kelas}" berhasil diperbarui!'}), 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error updating class: {e}")
+            return jsonify({'message': 'Gagal memperbarui kelas.', 'details': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        try:
+            # SQLAlchemy cascade delete harusnya menghapus RPP dan Soal terkait
+            # Juga relasi di kelas_siswa dan absensi siswa di kelas ini
+            db.session.delete(kelas)
+            db.session.commit()
+            return jsonify({'message': f'Kelas "{kelas.nama_kelas}" berhasil dihapus!'}), 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error deleting class: {e}")
+            return jsonify({'message': 'Gagal menghapus kelas.', 'details': str(e)}), 500
+
+
+# --- FUNGSI UNTUK SISWA (Tambahkan siswa secara global) ---
 @bp.route('/siswa', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
@@ -121,6 +169,41 @@ def daftarkan_siswa(id_kelas):
     db.session.commit()
     return jsonify({'message': f'Siswa {siswa.nama_lengkap} berhasil didaftarkan ke kelas {kelas.nama_kelas}!'})
 
+# --- FUNGSI UNTUK LIHAT SISWA DI KELAS TERTENTU (DENGAN SEARCH & FILTER) ---
+@bp.route('/kelas/<int:id_kelas>/siswa', methods=['GET'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def lihat_siswa_di_kelas(id_kelas):
+    kelas = Kelas.query.get_or_404(id_kelas)
+
+    search_query = request.args.get('search', None)
+    jenis_kelamin_filter = request.args.get('jenis_kelamin', None)
+    agama_filter = request.args.get('agama', None)
+
+    siswa_di_kelas = Siswa.get_filtered_students_in_class(
+        kelas_id=id_kelas,
+        search_query=search_query,
+        jenis_kelamin_filter=jenis_kelamin_filter,
+        agama_filter=agama_filter
+    )
+    
+    hasil_siswa = []
+    for siswa_obj in siswa_di_kelas:
+        hasil_siswa.append({
+            'id': siswa_obj.id,
+            'nama_lengkap': siswa_obj.nama_lengkap,
+            'nis': siswa_obj.nis,
+            'nisn': siswa_obj.nisn,
+            'tempat_lahir': siswa_obj.tempat_lahir,
+            'tanggal_lahir': siswa_obj.tanggal_lahir.isoformat() if siswa_obj.tanggal_lahir else None,
+            'jenis_kelamin': siswa_obj.jenis_kelamin,
+            'agama': siswa_obj.agama,
+            'alamat': siswa_obj.alamat,
+            'nomor_hp': siswa_obj.nomor_hp
+        })
+    
+    return jsonify(hasil_siswa)
+
 # --- FUNGSI UNTUK BULK IMPORT SISWA ---
 @bp.route('/kelas/<int:kelas_id>/siswa/bulk-import', methods=['POST'])
 @jwt_required()
@@ -153,7 +236,6 @@ def bulk_import_siswa(kelas_id):
                 sub_transaction.rollback()
                 continue
 
-            # Check for duplicates within the current Excel file being processed
             if current_nisn in processed_nisns_in_batch:
                 fail_count += 1
                 errors.append(f"Siswa dengan NISN {current_nisn} adalah duplikat di file Excel ini, dilewati.")
@@ -167,18 +249,15 @@ def bulk_import_siswa(kelas_id):
             if existing_siswa_global:
                 siswa_obj = existing_siswa_global
                 
-                # REVISED CHECK: Refresh the existing student object and then check its relationships
-                # This ensures `siswa_obj.kelas_terdaftar` is up-to-date with any changes committed in previous sub-transactions
-                db.session.refresh(siswa_obj) # Important: Refresh the specific student object
+                db.session.refresh(siswa_obj)
 
-                # Check if the main_kelas_obj is already in the student's list of enrolled classes
                 if main_kelas_obj in siswa_obj.kelas_terdaftar:
                     fail_count += 1
                     errors.append(f"Siswa {siswa_obj.nama_lengkap} (NISN: {siswa_obj.nisn}) sudah terdaftar di kelas ini, dilewati.")
                     sub_transaction.rollback()
                     continue
                 
-            else: # If the student does not exist globally, create a new one
+            else:
                 try:
                     tanggal_lahir_str = student_data.get('tanggal_lahir')
                     tanggal_lahir_obj = None
@@ -202,12 +281,11 @@ def bulk_import_siswa(kelas_id):
                     nomor_hp=student_data.get('nomor_hp')
                 )
                 db.session.add(siswa_obj) 
-                db.session.flush() # Flush to assign an ID to the new siswa_obj before relationship append
+                db.session.flush()
             
-            # This line is reached if the student is new or exists globally but is not yet enrolled in this class.
             main_kelas_obj.siswa.append(siswa_obj)
             
-            sub_transaction.commit() # Commit the nested transaction
+            sub_transaction.commit()
             
             success_count += 1
             processed_nisns_in_batch.add(current_nisn)
@@ -230,7 +308,7 @@ def bulk_import_siswa(kelas_id):
             errors.append(f"Gagal mengimpor siswa '{nama_lengkap}' (NISN: {current_nisn}): {str(e)}")
             print(f"General Error importing student {nama_lengkap}: {e}")
 
-    db.session.commit() # Final commit for the main transaction
+    db.session.commit()
 
     return jsonify({
         "message": f"Proses impor selesai: {success_count} siswa berhasil, {fail_count} gagal atau dilewati.",

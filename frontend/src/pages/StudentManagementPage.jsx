@@ -1,8 +1,8 @@
 // frontend/src/pages/StudentManagementPage.jsx
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom'; // Menggunakan RouterLink
-import { getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, updateSiswa, deleteSiswa, bulkImportSiswa } from '../api/classroomService'; // PERBAIKAN: Jalur impor yang benar
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, Link as RouterLink } from 'react-router-dom';
+import { getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, updateSiswa, deleteSiswa, bulkImportSiswa, getSiswaByKelas } from '../api/classroomService';
 import * as XLSX from 'xlsx';
 
 import {
@@ -11,77 +11,66 @@ import {
     TextField, Select, MenuItem, FormControl, InputLabel,
     Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Checkbox,
     CircularProgress, Snackbar, Alert, IconButton, Tooltip,
-    Input,
-    List, ListItem, ListItemText
+    Input, InputAdornment
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'; // Pastikan ini diimpor
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
-import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+
 
 // Define the expected fields for student data and their display names
 const FIELD_MAPPING = [
-    { key: 'nama_lengkap', label: 'Nama Lengkap', required: true },
-    { key: 'nisn', label: 'NISN', required: true },
-    { key: 'nis', label: 'NIS', required: false },
-    { key: 'tempat_lahir', label: 'Tempat Lahir', required: false },
-    { key: 'tanggal_lahir', label: 'Tanggal Lahir (YYYY-MM-DD)', required: false },
-    { key: 'jenis_kelamin', label: 'Jenis Kelamin', required: false },
-    { key: 'agama', label: 'Agama', required: false },
-    { key: 'alamat', label: 'Alamat', required: false },
-    { key: 'nomor_hp', label: 'Nomor HP', required: false },
+    { key: 'nama_lengkap', display: 'Nama Lengkap', required: true },
+    { key: 'nisn', display: 'NISN', required: true },
+    { key: 'nis', display: 'NIS' },
+    { key: 'tempat_lahir', display: 'Tempat Lahir' },
+    { key: 'tanggal_lahir', display: 'Tanggal Lahir (YYYY-MM-DD)' },
+    { key: 'jenis_kelamin', display: 'Jenis Kelamin' },
+    { key: 'agama', display: 'Agama' },
+    { key: 'alamat', display: 'Alamat' },
+    { key: 'nomor_hp', display: 'Nomor HP' }
 ];
 
 function StudentManagementPage() {
-    const { id } = useParams();
+    const { id } = useParams(); // Ini adalah id kelas dari URL
     const [kelas, setKelas] = useState(null);
     const [daftarSiswa, setDaftarSiswa] = useState([]);
-    
-    const initialFormState = {
-        nama_lengkap: '', nisn: '', nis: '', tempat_lahir: '', tanggal_lahir: '',
-        jenis_kelamin: 'Laki-laki', agama: 'Islam', alamat: '', nomor_hp: ''
-    };
-    const [formSiswa, setFormSiswa] = useState(initialFormState);
-
-    // State for Material-UI Dialog
-    const [editModalOpen, setEditModalOpen] = useState(false);
-    const [siswaUntukDiedit, setSiswaUntukDiedit] = useState(null);
-
-    // State for Upload Excel Dialog
-    const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-    const [excelData, setExcelData] = useState([]); // Raw data from Excel
-    const [excelHeaders, setExcelHeaders] = useState([]); // Headers from Excel
-    const [mappedHeaders, setMappedHeaders] = useState({}); // User's mapping of excel header to app field
-    const [selectedStudentsToImport, setSelectedStudentsToImport] = useState([]); // Selected rows to import
-    const [currentStep, setCurrentStep] = useState(1); // 1: Mapping, 2: Preview
-
-    // State for Loading and Snackbar Notifications
-    const [isLoading, setIsLoading] = useState(false);
-    const [isUploading, setIsUploading] = useState(false); // For bulk upload specific loading
+    const [isLoading, setIsLoading] = useState(true);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-    useEffect(() => {
-        muatDetailKelas();
-    }, [id]);
+    // State for Add Student Dialog
+    const [openAddDialog, setOpenAddDialog] = useState(false);
+    const [newStudentData, setNewStudentData] = useState({
+        nama_lengkap: '', nisn: '', nis: '', tempat_lahir: '',
+        tanggal_lahir: '', jenis_kelamin: 'Laki-laki', agama: 'Islam', alamat: '', nomor_hp: ''
+    });
 
-    const muatDetailKelas = async () => {
-        setIsLoading(true); // Set loading true when fetching data
-        try {
-            const detail = await getKelasDetail(id);
-            setKelas(detail);
-            setDaftarSiswa(detail.siswa);
-        } catch (error) {
-            console.error("Gagal memuat detail kelas:", error);
-            showSnackbar('Gagal memuat detail kelas.', 'error');
-        } finally {
-            setIsLoading(false); // Set loading false after fetch
-        }
-    };
+    // State for Edit Student Dialog
+    const [openEditDialog, setOpenEditDialog] = useState(false);
+    const [editStudentData, setEditStudentData] = useState(null);
+
+    // State for File Upload Dialog
+    const [openFileUploadDialog, setOpenFileUploadDialog] = useState(false);
+    const [excelFile, setExcelFile] = useState(null);
+    const [rawExcelDataRows, setRawExcelDataRows] = useState([]); // Raw data from Excel (rows excluding header)
+    const [currentStep, setCurrentStep] = useState(1); // 1: Upload & Mapping, 2: Preview
+    const [columnMapping, setColumnMapping] = useState({}); // Mapping app field key to Excel column index
+    const [excelHeadersRaw, setExcelHeadersRaw] = useState([]); // Raw headers from Excel, including potential empty cells
+    const [processedPreviewData, setProcessedPreviewData] = useState([]); // Data processed for preview, before final selection
+    const [selectedStudentsForImport, setSelectedStudentsForImport] = useState([]); // Final student objects ready to import
+    const [isUploading, setIsUploading] = useState(false);
+
+    // State for search and filter siswa
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterJenisKelamin, setFilterJenisKelamin] = useState('');
+    const [filterAgama, setFilterAgama] = useState('');
+
 
     const showSnackbar = (message, severity) => {
         setSnackbarMessage(message);
@@ -96,67 +85,136 @@ function StudentManagementPage() {
         setSnackbarOpen(false);
     };
 
-    const handleFormSiswaChange = (e) => {
-        setFormSiswa({ ...formSiswa, [e.target.name]: e.target.value });
+    // --- Data Fetching ---
+    const muatDataSiswa = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const dataSiswa = await getSiswaByKelas(id, searchQuery, filterJenisKelamin, filterAgama);
+            setDaftarSiswa(dataSiswa);
+        } catch (error) {
+            console.error("Error fetching students:", error);
+            showSnackbar('Gagal memuat daftar siswa.', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [id, searchQuery, filterJenisKelamin, filterAgama]);
+
+    useEffect(() => {
+        const fetchKelasDanSiswa = async () => {
+            setIsLoading(true);
+            try {
+                const kelasDetail = await getKelasDetail(id);
+                setKelas(kelasDetail);
+                muatDataSiswa(); 
+            } catch (error) {
+                console.error("Error fetching class details or students:", error);
+                showSnackbar('Gagal memuat detail kelas atau siswa.', 'error');
+                setIsLoading(false);
+            }
+        };
+
+        fetchKelasDanSiswa();
+    }, [id, muatDataSiswa]);
+
+    // --- Add Student Handlers ---
+    const handleOpenAddDialog = () => {
+        console.log('handleOpenAddDialog triggered: Opening Add Student Dialog');
+        setNewStudentData({ // Reset form saat membuka
+            nama_lengkap: '', nisn: '', nis: '', tempat_lahir: '',
+            tanggal_lahir: '', jenis_kelamin: 'Laki-laki', agama: 'Islam', alamat: '', nomor_hp: ''
+        });
+        setOpenAddDialog(true);
+    };
+
+    const handleCloseAddDialog = () => {
+        setOpenAddDialog(false);
+    };
+
+    const handleNewStudentChange = (e) => {
+        setNewStudentData({ ...newStudentData, [e.target.name]: e.target.value });
     };
 
     const handleTambahSiswa = async (e) => {
-        e.preventDefault();
+        console.log('handleTambahSiswa triggered');
+        // Pastikan event (e) diterima, karena ini bisa dipanggil dari onSubmit atau onClick
+        if (e && typeof e.preventDefault === 'function') {
+            e.preventDefault(); // Mencegah refresh halaman hanya jika ini adalah event form submission
+        }
+        
         setIsLoading(true);
         try {
-            // Validasi sederhana
-            if (!formSiswa.nama_lengkap || !formSiswa.nisn) {
+            if (!newStudentData.nama_lengkap || !newStudentData.nisn) {
                 showSnackbar('Nama Lengkap dan NISN wajib diisi.', 'warning');
                 setIsLoading(false);
                 return;
             }
+            console.log('Mengirim data siswa baru:', newStudentData);
 
-            const responsSiswa = await tambahSiswa(formSiswa);
-            await daftarkanSiswaKeKelas(id, responsSiswa.id_siswa);
-            showSnackbar(`Siswa "${formSiswa.nama_lengkap}" berhasil ditambahkan!`, 'success');
-            muatDetailKelas();
-            setFormSiswa(initialFormState); // Reset form
+            const responsSiswa = await tambahSiswa(newStudentData);
+            console.log('Siswa berhasil ditambahkan secara global:', responsSiswa);
+
+            if (responsSiswa && responsSiswa.id_siswa) {
+                await daftarkanSiswaKeKelas(id, responsSiswa.id_siswa);
+                console.log('Siswa berhasil didaftarkan ke kelas.');
+            } else {
+                // Tangani kasus di mana tambahSiswa tidak mengembalikan id_siswa
+                throw new Error('Siswa berhasil ditambahkan, tetapi ID siswa tidak ditemukan untuk pendaftaran kelas.');
+            }
+            
+
+            showSnackbar(`Siswa "${newStudentData.nama_lengkap}" berhasil ditambahkan dan didaftarkan!`, 'success');
+            handleCloseAddDialog();
+            muatDataSiswa();
         } catch (error) {
-            console.error('Gagal menambah siswa:', error);
-            showSnackbar(error.message || 'Gagal menambahkan siswa.', 'error');
+            console.error('Error adding and enrolling student:', error);
+            showSnackbar(error.message || 'Gagal menambah atau mendaftarkan siswa.', 'error');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const bukaModalEdit = (siswa) => {
+    // --- Edit Student Handlers ---
+    const handleOpenEditDialog = (siswa) => {
         const tgl = siswa.tanggal_lahir ? new Date(siswa.tanggal_lahir).toISOString().split('T')[0] : '';
-        setSiswaUntukDiedit({ ...siswa, tanggal_lahir: tgl });
-        setEditModalOpen(true);
+        setEditStudentData({ ...siswa, tanggal_lahir: tgl });
+        setOpenEditDialog(true);
     };
-    
-    const tutupModalEdit = () => setEditModalOpen(false);
+
+    const handleCloseEditDialog = () => {
+        setOpenEditDialog(false);
+        setEditStudentData(null);
+    };
+
+    const handleEditStudentChange = (e) => {
+        setEditStudentData({ ...editStudentData, [e.target.name]: e.target.value });
+    };
 
     const handleUpdateSiswa = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            await updateSiswa(siswaUntukDiedit.id, siswaUntukDiedit);
+            await updateSiswa(editStudentData.id, editStudentData);
             showSnackbar('Data siswa berhasil diperbarui!', 'success');
-            tutupModalEdit();
-            muatDetailKelas();
+            handleCloseEditDialog();
+            muatDataSiswa();
         } catch (error) {
-            console.error(error);
+            console.error('Error updating student:', error);
             showSnackbar(error.message || 'Gagal memperbarui data siswa.', 'error');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleHapusSiswa = async (idSiswa, namaSiswa) => {
-        if (window.confirm(`Apakah Anda yakin ingin menghapus siswa "${namaSiswa}"?`)) {
+    // --- Delete Student Handler ---
+    const handleDeleteSiswa = async (idSiswa, namaLengkap) => {
+        if (window.confirm(`Apakah Anda yakin ingin menghapus siswa "${namaLengkap}"? Aksi ini tidak dapat dibatalkan.`)) {
             setIsLoading(true);
             try {
                 await deleteSiswa(idSiswa);
-                showSnackbar('Siswa berhasil dihapus.', 'success');
-                muatDetailKelas();
+                showSnackbar(`Siswa "${namaLengkap}" berhasil dihapus.`, 'success');
+                muatDataSiswa();
             } catch (error) {
-                console.error(error);
+                console.error("Error deleting student:", error);
                 showSnackbar(error.message || 'Gagal menghapus siswa.', 'error');
             } finally {
                 setIsLoading(false);
@@ -164,166 +222,181 @@ function StudentManagementPage() {
         }
     };
 
-    // --- Excel Upload Functions ---
+    // --- File Upload Handlers ---
     const handleOpenUploadDialog = () => {
-        setUploadDialogOpen(true);
-        setCurrentStep(1); // Always start at mapping step
-        setExcelData([]);
-        setExcelHeaders([]);
-        setMappedHeaders({});
-        setSelectedStudentsToImport([]);
+        setOpenFileUploadDialog(true);
+        setCurrentStep(1); // Always start at step 1: Upload & Mapping
+        setExcelFile(null);
+        setRawExcelDataRows([]);
+        setExcelHeadersRaw([]);
+        setColumnMapping({});
+        setProcessedPreviewData([]);
+        setSelectedStudentsForImport([]);
+        setIsUploading(false); // Ensure this is false when opening
     };
 
     const handleCloseUploadDialog = () => {
-        setUploadDialogOpen(false);
+        setOpenFileUploadDialog(false);
+        setExcelFile(null);
+        setRawExcelDataRows([]);
+        setExcelHeadersRaw([]);
+        setColumnMapping({});
+        setProcessedPreviewData([]);
+        setSelectedStudentsForImport([]);
+        setCurrentStep(1);
+        setIsUploading(false);
     };
 
-    const handleFileUpload = (event) => {
+    const handleFileChange = (event) => {
         const file = event.target.files[0];
         if (file) {
+            setExcelFile(file);
             setIsUploading(true);
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
+                    const binaryStr = e.target.result;
+                    const workbook = XLSX.read(binaryStr, { type: 'binary', cellDates: true, raw: false });
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
-                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // Get data as array of arrays
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: "" }); 
 
-                    if (json.length === 0 || json.length === 1 && json[0].every(cell => !cell)) { // Check for empty or only headers
+                    if (json.length === 0 || (json.length === 1 && json[0].every(cell => !cell))) {
                         showSnackbar('File Excel kosong atau tidak ada data siswa.', 'warning');
                         handleCloseUploadDialog();
                         return;
                     }
 
-                    const headers = json[0]; // First row is headers
-                    const rows = json.slice(1); // Rest are data rows
+                    const rawHeaders = json[0] || [];
+                    setExcelHeadersRaw(rawHeaders);
 
-                    setExcelHeaders(headers);
-                    setExcelData(rows);
+                    const dataRows = json.slice(1);
+                    setRawExcelDataRows(dataRows);
 
-                    // Auto-map headers
-                    const autoMapped = {};
-                    FIELD_MAPPING.forEach(field => {
-                        const detectedHeader = headers.find(h => 
-                            h && (
-                                h.toLowerCase().replace(/[^a-z0-9]/g, '') === field.label.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-                                h.toLowerCase().replace(/[^a-z0-9]/g, '') === field.key.toLowerCase().replace(/[^a-z0-9]/g, '')
-                            )
-                        );
-                        if (detectedHeader) {
-                            autoMapped[field.key] = detectedHeader;
-                        }
+                    const initialMapping = {};
+                    rawHeaders.forEach((headerValue, index) => {
+                        const cleanHeader = (headerValue || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                        FIELD_MAPPING.forEach(field => {
+                            const cleanFieldDisplay = field.display.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            if (cleanHeader === cleanFieldDisplay || cleanHeader === field.key.toLowerCase()) {
+                                initialMapping[field.key] = index;
+                            }
+                        });
                     });
-                    setMappedHeaders(autoMapped);
-                    
-                    // Default select all rows for import
-                    setSelectedStudentsToImport(rows.map((_, index) => index));
-                    setCurrentStep(1); // Stay on mapping step first
-                    setUploadDialogOpen(true); // Open the dialog
+                    setColumnMapping(initialMapping);
+
                 } catch (error) {
                     console.error('Error reading Excel file:', error);
                     showSnackbar('Gagal membaca file Excel. Pastikan formatnya benar.', 'error');
                     handleCloseUploadDialog();
                 } finally {
                     setIsUploading(false);
-                    // Clear the file input after processing to allow re-uploading the same file
                     event.target.value = '';
                 }
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsBinaryString(file);
         }
     };
 
-    const handleMappingChange = (appFieldKey, excelHeader) => {
-        setMappedHeaders(prev => ({
-            ...prev,
-            [appFieldKey]: excelHeader === '' ? undefined : excelHeader // Use undefined for unselected
-        }));
+    const handleColumnMappingChange = (fieldKey, excelColIndex) => {
+        setColumnMapping(prev => ({ ...prev, [fieldKey]: excelColIndex === '' ? undefined : parseInt(excelColIndex) }));
     };
 
-    // Prepare data based on current mapping for preview and final import
-    const getProcessedExcelData = () => {
-        if (!excelData || excelData.length === 0) return [];
-        
-        return excelData.map(row => {
-            const student = {};
-            FIELD_MAPPING.forEach(field => {
-                const excelHeader = mappedHeaders[field.key];
-                if (excelHeader !== undefined && excelHeaders.includes(excelHeader)) {
-                    const headerIndex = excelHeaders.indexOf(excelHeader);
-                    let value = row[headerIndex];
-                    
-                    // Special handling for date field
-                    if (field.key === 'tanggal_lahir') {
-                        // Attempt to parse as date, can be Excel number or string
-                        if (typeof value === 'number') {
-                            const excelDate = new Date(Date.UTC(0, 0, value - 1)); // -1 for Excel's 1900 leap year bug
-                            student[field.key] = excelDate.toISOString().split('T')[0];
-                        } else if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                            student[field.key] = value; // Assume YYYY-MM-DD
-                        } else {
-                            student[field.key] = null; // Or handle as error
-                        }
-                    } else if (field.key === 'nomor_hp') {
-                        student[field.key] = value ? String(value) : ''; // Ensure phone number is string
-                    }
-                    else {
-                        student[field.key] = value;
+    const processExcelRowToStudent = (row, mapping, headersRaw) => {
+        const student = {};
+        FIELD_MAPPING.forEach(field => {
+            const excelIndex = mapping[field.key];
+            let rawValue = excelIndex !== undefined ? row[excelIndex] : undefined;
+
+            if (rawValue === undefined || rawValue === null || rawValue === '') {
+                student[field.key] = '';
+            } else if (field.key === 'tanggal_lahir') {
+                let dateValue = rawValue;
+                if (dateValue instanceof Date) {
+                    student[field.key] = dateValue.toISOString().split('T')[0];
+                } else if (typeof dateValue === 'number') {
+                    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+                    const date = new Date(excelEpoch.getTime() + (dateValue - 1) * 24 * 60 * 60 * 1000);
+                    student[field.key] = date.toISOString().split('T')[0];
+                } else {
+                    const parsedDate = new Date(dateValue);
+                    if (!isNaN(parsedDate.getTime())) {
+                        student[field.key] = parsedDate.toISOString().split('T')[0];
+                    } else {
+                        student[field.key] = String(dateValue);
                     }
                 }
-            });
-            return student;
+            } else {
+                student[field.key] = String(rawValue).trim();
+            }
         });
+
+        student._isValid = FIELD_MAPPING.every(field => !field.required || (student[field.key] && student[field.key].trim() !== ''));
+        return student;
     };
+
+
+    const handleConfirmMapping = () => {
+        const requiredFieldsMapped = FIELD_MAPPING.filter(field => field.required).every(field => 
+            columnMapping.hasOwnProperty(field.key) && columnMapping[field.key] !== undefined
+        );
+
+        if (!requiredFieldsMapped) {
+            showSnackbar("Pastikan semua kolom wajib (Nama Lengkap, NISN) sudah dipetakan.", "warning");
+            return;
+        }
+
+        const processed = rawExcelDataRows.map(row => 
+            processExcelRowToStudent(row, columnMapping, excelHeadersRaw)
+        );
+        setProcessedPreviewData(processed);
+        setSelectedStudentsForImport(processed.filter(s => s._isValid));
+
+        setCurrentStep(2);
+    };
+
 
     const handleToggleSelectAll = (event) => {
         if (event.target.checked) {
-            setSelectedStudentsToImport(excelData.map((_, index) => index));
+            setSelectedStudentsForImport(processedPreviewData.filter(s => s._isValid));
         } else {
-            setSelectedStudentsToImport([]);
+            setSelectedStudentsForImport([]);
         }
     };
 
-    const handleToggleSelect = (index) => {
-        setSelectedStudentsToImport(prev => 
-            prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    const handleToggleSelect = (toggledStudent) => {
+        setSelectedStudentsForImport(prev => 
+            prev.some(s => s.nisn === toggledStudent.nisn) 
+                ? prev.filter(s => s.nisn !== toggledStudent.nisn) 
+                : [...prev, toggledStudent]
         );
-    };
-
-    const handleConfirmMapping = () => {
-        // Basic validation: check if all required fields are mapped
-        const missingRequiredMapping = FIELD_MAPPING.some(field => 
-            field.required && !mappedHeaders[field.key]
-        );
-
-        if (missingRequiredMapping) {
-            showSnackbar('Semua kolom wajib harus dipetakan.', 'warning');
-            return;
-        }
-        setCurrentStep(2); // Move to preview step
     };
 
     const handleImportSelectedStudents = async () => {
         setIsUploading(true);
         try {
-            const studentsToImport = getProcessedExcelData().filter((_, index) => 
-                selectedStudentsToImport.includes(index)
-            );
-
-            if (studentsToImport.length === 0) {
+            if (selectedStudentsForImport.length === 0) {
                 showSnackbar('Tidak ada siswa yang dipilih untuk diimpor.', 'warning');
                 setIsUploading(false);
                 return;
             }
 
-            // Panggil fungsi bulkImportSiswa dari classroomService
-            const response = await bulkImportSiswa(id, studentsToImport); // id adalah id kelas
+            const dataToUpload = selectedStudentsForImport.map(student => {
+                const cleanStudent = { ...student };
+                delete cleanStudent._isValid;
+                return cleanStudent;
+            });
+            
+            const response = await bulkImportSiswa(id, dataToUpload);
 
-            showSnackbar(response.message || 'Impor selesai!', 'success');
+            let combinedMessage = response.message || 'Proses impor selesai.';
+            if (response.errors && response.errors.length > 0) {
+                combinedMessage += " Detail error:\n" + response.errors.join('\n');
+            }
+            showSnackbar(combinedMessage, response.fail_count > 0 ? 'warning' : 'success');
+
             handleCloseUploadDialog();
-            muatDetailKelas(); // Refresh student list
+            muatDataSiswa();
         } catch (error) {
             console.error('Kesalahan saat mengimpor siswa massal:', error);
             showSnackbar(error.message || 'Gagal mengimpor siswa massal.', 'error');
@@ -333,7 +406,13 @@ function StudentManagementPage() {
     };
 
 
-    if (isLoading && !kelas) { // Only show full page loader if initial class data is loading
+    // Options for Jenis Kelamin filter
+    const jenisKelaminOptions = ['Laki-laki', 'Perempuan'];
+    // Options for Agama filter (example)
+    const agamaOptions = ['Islam', 'Kristen Protestan', 'Kristen Katolik', 'Hindu', 'Buddha', 'Konghucu'];
+
+
+    if (isLoading && !kelas) {
         return (
             <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
                 <CircularProgress />
@@ -349,10 +428,9 @@ function StudentManagementPage() {
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Box sx={{ mb: 3 }}>
-                {/* PERBAIKAN: Tombol kembali sekarang menuju ke ClassListPage */}
                 <RouterLink to={`/kelas`} style={{ textDecoration: 'none' }}>
                     <Button variant="outlined" startIcon={<InfoOutlinedIcon />}>
-                        Kembali ke Detail Kelas
+                        Kembali ke Daftar Kelas
                     </Button>
                 </RouterLink>
             </Box>
@@ -369,8 +447,7 @@ function StudentManagementPage() {
                     <Button
                         variant="contained"
                         startIcon={<AddIcon />}
-                        onClick={() => setFormSiswa(initialFormState)} // Reset form before opening
-                        // onClick={() => setOpenAddDialog(true)} // Jika ingin menggunakan dialog
+                        onClick={handleOpenAddDialog}
                         fullWidth
                     >
                         Tambah Siswa Baru (Manual)
@@ -388,123 +465,105 @@ function StudentManagementPage() {
                 </Grid>
             </Grid>
 
-            {/* Form Tambah Siswa Manual (jika tidak pakai dialog terpisah) */}
-            <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h5" component="h2" gutterBottom>
-                    Tambah Siswa Baru (Manual)
-                </Typography>
-                <Box component="form" onSubmit={handleTambahSiswa} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <TextField
-                        fullWidth
-                        label="Nama Lengkap"
-                        name="nama_lengkap"
-                        value={formSiswa.nama_lengkap}
-                        onChange={handleFormSiswaChange}
-                        required
-                    />
-                    <TextField
-                        fullWidth
-                        label="NISN"
-                        name="nisn"
-                        value={formSiswa.nisn}
-                        onChange={handleFormSiswaChange}
-                        required
-                    />
-                    <TextField
-                        fullWidth
-                        label="NIS"
-                        name="nis"
-                        value={formSiswa.nis}
-                        onChange={handleFormSiswaChange}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Tempat Lahir"
-                        name="tempat_lahir"
-                        value={formSiswa.tempat_lahir}
-                        onChange={handleFormSiswaChange}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Tanggal Lahir"
-                        type="date"
-                        name="tanggal_lahir"
-                        value={formSiswa.tanggal_lahir}
-                        onChange={handleFormSiswaChange}
-                        InputLabelProps={{ shrink: true }}
-                    />
-                    <FormControl fullWidth>
-                        <InputLabel>Jenis Kelamin</InputLabel>
-                        <Select
-                            name="jenis_kelamin"
-                            value={formSiswa.jenis_kelamin}
-                            label="Jenis Kelamin"
-                            onChange={handleFormSiswaChange}
-                        >
-                            <MenuItem value="Laki-laki">Laki-laki</MenuItem>
-                            <MenuItem value="Perempuan">Perempuan</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth>
-                        <InputLabel>Agama</InputLabel>
-                        <Select
-                            name="agama"
-                            value={formSiswa.agama}
-                            label="Agama"
-                            onChange={handleFormSiswaChange}
-                        >
-                            <MenuItem value="Islam">Islam</MenuItem>
-                            <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
-                            <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
-                            <MenuItem value="Hindu">Hindu</MenuItem>
-                            <MenuItem value="Buddha">Buddha</MenuItem>
-                            <MenuItem value="Konghucu">Konghucu</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <TextField
-                        fullWidth
-                        label="Alamat Lengkap"
-                        name="alamat"
-                        multiline
-                        rows={3}
-                        value={formSiswa.alamat}
-                        onChange={handleFormSiswaChange}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Nomor HP Siswa"
-                        name="nomor_hp"
-                        value={formSiswa.nomor_hp}
-                        onChange={handleFormSiswaChange}
-                    />
-                    <Button type="submit" variant="contained" disabled={isLoading}>
-                        {isLoading ? <CircularProgress size={24} /> : 'Tambahkan Siswa'}
-                    </Button>
-                </Box>
-            </Paper>
-
+            {/* Bagian Daftar Siswa */}
             <Paper elevation={3} sx={{ p: 3 }}>
                 <Typography variant="h5" component="h2" gutterBottom>
                     Daftar Siswa di Kelas Ini ({daftarSiswa.length} siswa)
                 </Typography>
-                {isLoading && daftarSiswa.length === 0 ? ( // Display loader only if initial list is empty
+
+                {/* Search and Filter Section for Students */}
+                <Box sx={{ mb: 3 }}>
+                    <TextField
+                        fullWidth
+                        label="Cari Siswa berdasarkan Nama"
+                        variant="outlined"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchIcon />
+                                </InputAdornment>
+                            ),
+                            endAdornment: searchQuery && (
+                                <InputAdornment position="end">
+                                    <IconButton onClick={() => setSearchQuery('')} edge="end">
+                                        <ClearIcon />
+                                    </IconButton>
+                                </InputAdornment>
+                            ),
+                        }}
+                        sx={{ mb: 2 }}
+                    />
+                    <Grid container spacing={2}>
+                        <Grid item xs={6}>
+                            <FormControl fullWidth variant="outlined">
+                                <InputLabel>Jenis Kelamin</InputLabel>
+                                <Select
+                                    value={filterJenisKelamin}
+                                    onChange={(e) => setFilterJenisKelamin(e.target.value)}
+                                    label="Jenis Kelamin"
+                                >
+                                    <MenuItem value="">Semua</MenuItem>
+                                    {jenisKelaminOptions.map((jk) => (
+                                        <MenuItem key={jk} value={jk}>{jk}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={6}>
+                            <FormControl fullWidth variant="outlined">
+                                <InputLabel>Agama</InputLabel>
+                                <Select
+                                    value={filterAgama}
+                                    onChange={(e) => setFilterAgama(e.target.value)}
+                                    label="Agama"
+                                >
+                                    <MenuItem value="">Semua</MenuItem>
+                                    {agamaOptions.map((agama) => (
+                                        <MenuItem key={agama} value={agama}>{agama}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        { (searchQuery || filterJenisKelamin || filterAgama) && (
+                            <Grid item xs={12}>
+                                <Button 
+                                    fullWidth 
+                                    variant="outlined" 
+                                    onClick={() => { setSearchQuery(''); setFilterJenisKelamin(''); setFilterAgama(''); }} 
+                                    startIcon={<ClearIcon />}
+                                >
+                                    Reset Filter
+                                </Button>
+                            </Grid>
+                        )}
+                    </Grid>
+                </Box>
+
+                {isLoading && daftarSiswa.length === 0 ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
                         <CircularProgress />
                     </Box>
                 ) : daftarSiswa.length === 0 ? (
                     <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 3 }}>
-                        Belum ada siswa di kelas ini.
+                        { (searchQuery || filterJenisKelamin || filterAgama) ?
+                            "Tidak ada siswa yang cocok dengan kriteria pencarian/filter Anda." :
+                            `Belum ada siswa di kelas ${kelas?.nama_kelas}. Silakan tambahkan.`
+                        }
                     </Typography>
                 ) : (
-                    <TableContainer>
-                        <Table>
+                    <TableContainer component={Paper} elevation={1}>
+                        <Table size="small">
                             <TableHead>
                                 <TableRow>
                                     <TableCell>No.</TableCell>
                                     <TableCell>Nama Lengkap</TableCell>
                                     <TableCell>NISN</TableCell>
                                     <TableCell>Jenis Kelamin</TableCell>
-                                    <TableCell>Aksi</TableCell>
+                                    <TableCell>Tanggal Lahir</TableCell>
+                                    <TableCell>Agama</TableCell>
+                                    <TableCell align="right">Aksi</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -514,12 +573,14 @@ function StudentManagementPage() {
                                         <TableCell>{siswa.nama_lengkap}</TableCell>
                                         <TableCell>{siswa.nisn || 'N/A'}</TableCell>
                                         <TableCell>{siswa.jenis_kelamin}</TableCell>
-                                        <TableCell>
-                                            <IconButton color="primary" onClick={() => bukaModalEdit(siswa)}>
-                                                <EditIcon />
+                                        <TableCell>{siswa.tanggal_lahir}</TableCell>
+                                        <TableCell>{siswa.agama}</TableCell>
+                                        <TableCell align="right">
+                                            <IconButton size="small" onClick={() => handleOpenEditDialog(siswa)}>
+                                                <EditIcon fontSize="small" />
                                             </IconButton>
-                                            <IconButton color="error" onClick={() => handleHapusSiswa(siswa.id, siswa.nama_lengkap)}>
-                                                <DeleteIcon />
+                                            <IconButton size="small" color="error" onClick={() => handleDeleteSiswa(siswa.id, siswa.nama_lengkap)}>
+                                                <DeleteIcon fontSize="small" />
                                             </IconButton>
                                         </TableCell>
                                     </TableRow>
@@ -530,54 +591,102 @@ function StudentManagementPage() {
                 )}
             </Paper>
 
-            {/* Dialog untuk Edit Siswa */}
-            <Dialog open={editModalOpen} onClose={tutupModalEdit}>
-                {siswaUntukDiedit && (
-                    <>
-                        <DialogTitle>Edit Data Siswa: {siswaUntukDiedit.nama_lengkap}</DialogTitle>
-                        <DialogContent dividers>
-                            <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                                <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={siswaUntukDiedit.nama_lengkap || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, nama_lengkap: e.target.value})} required />
-                                <TextField fullWidth label="NISN" name="nisn" value={siswaUntukDiedit.nisn || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, nisn: e.target.value})} />
-                                <TextField fullWidth label="NIS" name="nis" value={siswaUntukDiedit.nis || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, nis: e.target.value})} />
-                                <TextField fullWidth label="Tempat Lahir" name="tempat_lahir" value={siswaUntukDiedit.tempat_lahir || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, tempat_lahir: e.target.value})} />
-                                <TextField fullWidth label="Tanggal Lahir" type="date" name="tanggal_lahir" value={siswaUntukDiedit.tanggal_lahir || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, tanggal_lahir: e.target.value})} InputLabelProps={{ shrink: true }} />
-                                <FormControl fullWidth>
-                                    <InputLabel>Jenis Kelamin</InputLabel>
-                                    <Select name="jenis_kelamin" value={siswaUntukDiedit.jenis_kelamin || 'Laki-laki'} label="Jenis Kelamin" onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, jenis_kelamin: e.target.value})}>
-                                        <MenuItem value="Laki-laki">Laki-laki</MenuItem>
-                                        <MenuItem value="Perempuan">Perempuan</MenuItem>
-                                    </Select>
-                                </FormControl>
-                                <FormControl fullWidth>
-                                    <InputLabel>Agama</InputLabel>
-                                    <Select name="agama" value={siswaUntukDiedit.agama || 'Islam'} label="Agama" onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, agama: e.target.value})}>
-                                        <MenuItem value="Islam">Islam</MenuItem>
-                                        <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
-                                        <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
-                                        <MenuItem value="Hindu">Hindu</MenuItem>
-                                        <MenuItem value="Buddha">Buddha</MenuItem>
-                                        <MenuItem value="Konghucu">Konghucu</MenuItem>
-                                    </Select>
-                                </FormControl>
-                                <TextField fullWidth label="Alamat Lengkap" name="alamat" multiline rows={3} value={siswaUntukDiedit.alamat || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, alamat: e.target.value})} />
-                                <TextField fullWidth label="Nomor HP Siswa" name="nomor_hp" value={siswaUntukDiedit.nomor_hp || ''} onChange={(e) => setSiswaUntukDiedit({...siswaUntukDiedit, nomor_hp: e.target.value})} />
-                            </Box>
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={tutupModalEdit} color="secondary">
-                                Batal
-                            </Button>
-                            <Button onClick={handleUpdateSiswa} variant="contained" disabled={isLoading}>
-                                {isLoading ? <CircularProgress size={24} /> : 'Simpan Perubahan'}
-                            </Button>
-                        </DialogActions>
-                    </>
-                )}
+            {/* Dialog Tambah Siswa Baru (Manual) */}
+            <Dialog open={openAddDialog} onClose={handleCloseAddDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Tambah Siswa Baru (Manual)</DialogTitle>
+                <DialogContent dividers>
+                    {/* BERIKAN ID PADA BOX YANG BERFUNGSI SEBAGAI FORM */}
+                    <Box component="form" id="add-student-form" onSubmit={handleTambahSiswa} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                        <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={newStudentData.nama_lengkap} onChange={handleNewStudentChange} required />
+                        <TextField fullWidth label="NISN" name="nisn" value={newStudentData.nisn} onChange={handleNewStudentChange} required />
+                        <TextField fullWidth label="NIS" name="nis" value={newStudentData.nis} onChange={handleNewStudentChange} />
+                        <TextField fullWidth label="Tempat Lahir" name="tempat_lahir" value={newStudentData.tempat_lahir} onChange={handleNewStudentChange} />
+                        <TextField fullWidth label="Tanggal Lahir (YYYY-MM-DD)" name="tanggal_lahir" type="date" value={newStudentData.tanggal_lahir} onChange={handleNewStudentChange} InputLabelProps={{ shrink: true }} />
+                        <FormControl fullWidth>
+                            <InputLabel>Jenis Kelamin</InputLabel>
+                            <Select name="jenis_kelamin" value={newStudentData.jenis_kelamin} label="Jenis Kelamin" onChange={handleNewStudentChange}>
+                                <MenuItem value="Laki-laki">Laki-laki</MenuItem>
+                                <MenuItem value="Perempuan">Perempuan</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth>
+                            <InputLabel>Agama</InputLabel>
+                            <Select name="agama" value={newStudentData.agama} label="Agama" onChange={handleNewStudentChange}>
+                                <MenuItem value="Islam">Islam</MenuItem>
+                                <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
+                                <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
+                                <MenuItem value="Hindu">Hindu</MenuItem>
+                                <MenuItem value="Buddha">Buddha</MenuItem>
+                                <MenuItem value="Konghucu">Konghucu</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <TextField fullWidth label="Alamat Lengkap" name="alamat" multiline rows={3} value={newStudentData.alamat} onChange={handleNewStudentChange} />
+                        <TextField fullWidth label="Nomor HP" name="nomor_hp" value={newStudentData.nomor_hp} onChange={handleNewStudentChange} />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseAddDialog} color="secondary">Batal</Button>
+                    <Button
+                        type="submit" // Penting untuk memicu onSubmit form
+                        form="add-student-form" // Menghubungkan button ini ke form dengan ID "add-student-form"
+                        variant="contained"
+                        disabled={isLoading}
+                        // Fallback onClick: panggil handleTambahSiswa langsung, tapi pastikan tidak memicu dua kali
+                        // Hapus console.log di sini jika sudah berfungsi normal dan tidak lagi dibutuhkan untuk debugging
+                        onClick={ (e) => { console.log('Button onClick triggered (fallback)'); if (!isLoading) handleTambahSiswa(e); } } 
+                    >
+                        {isLoading ? <CircularProgress size={24} /> : 'Tambahkan Siswa'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+
+            {/* Dialog Edit Siswa */}
+            <Dialog open={openEditDialog} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Edit Siswa</DialogTitle>
+                <DialogContent dividers>
+                    {editStudentData && (
+                        <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                            <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={editStudentData.nama_lengkap || ''} onChange={handleEditStudentChange} required />
+                            <TextField fullWidth label="NISN" name="nisn" value={editStudentData.nisn || ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="NIS" name="nis" value={editStudentData.nis || ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Tempat Lahir" name="tempat_lahir" value={editStudentData.tempat_lahir || ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Tanggal Lahir (YYYY-MM-DD)" type="date" name="tanggal_lahir" value={editStudentData.tanggal_lahir || ''} onChange={handleEditStudentChange} InputLabelProps={{ shrink: true }} />
+                            <FormControl fullWidth>
+                                <InputLabel>Jenis Kelamin</InputLabel>
+                                <Select name="jenis_kelamin" value={editStudentData.jenis_kelamin || 'Laki-laki'} label="Jenis Kelamin" onChange={handleEditStudentChange}>
+                                    <MenuItem value="Laki-laki">Laki-laki</MenuItem>
+                                    <MenuItem value="Perempuan">Perempuan</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <InputLabel>Agama</InputLabel>
+                                <Select name="agama" value={editStudentData.agama || 'Islam'} label="Agama" onChange={handleEditStudentChange}>
+                                    <MenuItem value="Islam">Islam</MenuItem>
+                                    <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
+                                    <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
+                                    <MenuItem value="Hindu">Hindu</MenuItem>
+                                    <MenuItem value="Buddha">Buddha</MenuItem>
+                                    <MenuItem value="Konghucu">Konghucu</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <TextField fullWidth label="Alamat Lengkap" name="alamat" multiline rows={3} value={editStudentData.alamat || ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Nomor HP Siswa" name="nomor_hp" value={editStudentData.nomor_hp || ''} onChange={handleEditStudentChange} />
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseEditDialog} color="secondary">
+                        Batal
+                    </Button>
+                    <Button onClick={handleUpdateSiswa} variant="contained" disabled={isLoading}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Simpan Perubahan'}
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* Dialog untuk Unggah Siswa via Excel */}
-            <Dialog open={uploadDialogOpen} onClose={handleCloseUploadDialog} maxWidth="md" fullWidth>
+            <Dialog open={openFileUploadDialog} onClose={handleCloseUploadDialog} maxWidth="md" fullWidth>
                 <DialogTitle>
                     Unggah Siswa via Excel - Langkah {currentStep} dari 2
                     <IconButton
@@ -591,45 +700,67 @@ function StudentManagementPage() {
                             transform: 'rotate(45deg)'
                         }}
                     >
-                        <AddIcon /> {/* Close icon is AddIcon rotated */}
+                        <AddIcon />
                     </IconButton>
                 </DialogTitle>
                 <DialogContent dividers>
-                    {isUploading ? (
+                    {isUploading && (
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 5 }}>
                             <CircularProgress sx={{ mb: 2 }} />
                             <Typography>Memproses file Excel...</Typography>
                         </Box>
-                    ) : (
-                        <>
-                            {currentStep === 1 && (
-                                <Box>
-                                    <Typography variant="h6" gutterBottom>
-                                        Langkah 1: Petakan Kolom Excel ke Field Aplikasi
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                        Pilih kolom dari file Excel Anda yang sesuai dengan setiap field data siswa di aplikasi. Pastikan field yang *wajib* sudah terisi.
+                    )}
+
+                    {!isUploading && currentStep === 1 && (
+                        <Box>
+                            <Typography variant="h6" gutterBottom>
+                                Langkah 1: Unggah File Excel dan Petakan Kolom
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Pilih file Excel (.xlsx atau .xls) yang berisi data siswa. Kemudian, petakan kolom dari file Excel Anda ke field aplikasi. Pastikan field yang *wajib* sudah terisi.
+                            </Typography>
+                            <Input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={handleFileChange}
+                                fullWidth
+                                sx={{ mb: 2 }}
+                            />
+                            {excelFile && (
+                                <Typography variant="body2" color="text.secondary">
+                                    File dipilih: {excelFile.name} ({rawExcelDataRows.length} baris data ditemukan)
+                                </Typography>
+                            )}
+
+                            {rawExcelDataRows.length > 0 && (
+                                <Box mt={3}>
+                                    <Typography variant="subtitle1" gutterBottom>
+                                        Pemetaan Kolom Excel
+                                        <Tooltip title="Petakan kolom Excel Anda ke field yang sesuai di aplikasi.">
+                                            <IconButton size="small">
+                                                <InfoOutlinedIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                     </Typography>
                                     <Grid container spacing={2}>
-                                        {FIELD_MAPPING.map(field => (
+                                        {FIELD_MAPPING.map((field) => (
                                             <Grid item xs={12} sm={6} key={field.key}>
-                                                <FormControl fullWidth required={field.required}>
-                                                    <InputLabel>{field.label} {field.required && '*'}</InputLabel>
+                                                <FormControl fullWidth variant="outlined" size="small" required={field.required}>
+                                                    <InputLabel>{field.display} {field.required ? '*' : ''}</InputLabel>
                                                     <Select
-                                                        value={mappedHeaders[field.key] || ''}
-                                                        label={`${field.label} ${field.required ? '*' : ''}`}
-                                                        onChange={(e) => handleMappingChange(field.key, e.target.value)}
+                                                        value={columnMapping[field.key] !== undefined ? columnMapping[field.key] : ''}
+                                                        onChange={(e) => handleColumnMappingChange(field.key, e.target.value)}
+                                                        label={`${field.display} ${field.required ? '*' : ''}`}
                                                     >
-                                                        <MenuItem value="">
-                                                            <em>Tidak Ada</em>
-                                                        </MenuItem>
-                                                        {excelHeaders.map(header => (
-                                                            <MenuItem key={header} value={header}>
-                                                                {header}
+                                                        <MenuItem value="">Pilih Kolom Excel</MenuItem>
+                                                        {excelHeadersRaw.map((header, index) => (
+                                                            header &&
+                                                            <MenuItem key={header + index} value={index}> 
+                                                                {String(header)}
                                                             </MenuItem>
                                                         ))}
                                                     </Select>
-                                                    {field.required && !mappedHeaders[field.key] && (
+                                                    {field.required && columnMapping[field.key] === undefined && (
                                                         <Typography variant="caption" color="error">Wajib dipetakan</Typography>
                                                     )}
                                                 </FormControl>
@@ -638,61 +769,63 @@ function StudentManagementPage() {
                                     </Grid>
                                 </Box>
                             )}
+                        </Box>
+                    )}
 
-                            {currentStep === 2 && (
-                                <Box>
-                                    <Typography variant="h6" gutterBottom>
-                                        Langkah 2: Pratinjau Data dan Pilih Siswa untuk Diimpor
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                        Centang siswa yang ingin Anda impor. Anda dapat meninjau data yang dipetakan di bawah ini.
-                                    </Typography>
-                                    <TableContainer component={Paper} elevation={1}>
-                                        <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
+                    {!isUploading && currentStep === 2 && (
+                        <Box>
+                            <Typography variant="h6" gutterBottom>
+                                Langkah 2: Pratinjau Data dan Pilih Siswa untuk Diimpor
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Centang siswa yang ingin Anda impor. Hanya siswa yang memenuhi syarat (kolom wajib terisi) yang ditampilkan.
+                            </Typography>
+                            <TableContainer component={Paper} elevation={1} sx={{ maxHeight: 400, overflow: 'auto' }}>
+                                <Table stickyHeader size="small">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    onChange={handleToggleSelectAll}
+                                                    checked={selectedStudentsForImport.length > 0 && selectedStudentsForImport.length === processedPreviewData.filter(s => s._isValid).length}
+                                                />
+                                            </TableCell>
+                                            {FIELD_MAPPING.map((field) => (
+                                                columnMapping[field.key] !== undefined &&
+                                                <TableCell key={field.key}>{field.display}</TableCell>
+                                            ))}
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {processedPreviewData.map((student, index) => {
+                                            if (!student._isValid) return null;
+
+                                            const isStudentSelected = selectedStudentsForImport.some(s => s.nisn === student.nisn);
+
+                                            return (
+                                                <TableRow key={index}>
                                                     <TableCell padding="checkbox">
                                                         <Checkbox
-                                                            icon={<CheckBoxOutlineBlankIcon />}
-                                                            checkedIcon={<CheckBoxIcon />}
-                                                            checked={selectedStudentsToImport.length === excelData.length && excelData.length > 0}
-                                                            onChange={handleToggleSelectAll}
-                                                            inputProps={{ 'aria-label': 'select all students' }}
+                                                            onChange={() => handleToggleSelect(student)}
+                                                            checked={isStudentSelected}
                                                         />
                                                     </TableCell>
-                                                    {FIELD_MAPPING.map(field => (
-                                                        mappedHeaders[field.key] && ( // Only show mapped columns
-                                                            <TableCell key={field.key}>{field.label}</TableCell>
-                                                        )
+                                                    {FIELD_MAPPING.map((field) => (
+                                                        columnMapping[field.key] !== undefined &&
+                                                        <TableCell key={field.key}>
+                                                            {student[field.key]}
+                                                        </TableCell>
                                                     ))}
                                                 </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {getProcessedExcelData().map((student, index) => (
-                                                    <TableRow key={index}>
-                                                        <TableCell padding="checkbox">
-                                                            <Checkbox
-                                                                icon={<CheckBoxOutlineBlankIcon />}
-                                                                checkedIcon={<CheckBoxIcon />}
-                                                                checked={selectedStudentsToImport.includes(index)}
-                                                                onChange={() => handleToggleSelect(index)}
-                                                            />
-                                                        </TableCell>
-                                                        {FIELD_MAPPING.map(field => (
-                                                            mappedHeaders[field.key] && (
-                                                                <TableCell key={field.key}>
-                                                                    {student[field.key] !== undefined ? String(student[field.key]) : ''}
-                                                                </TableCell>
-                                                            )
-                                                        ))}
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                </Box>
-                            )}
-                        </>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <Typography variant="body2" color="text.secondary" mt={2}>
+                                {selectedStudentsForImport.length} siswa siap diimpor.
+                            </Typography>
+                        </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
@@ -700,8 +833,8 @@ function StudentManagementPage() {
                         Batal
                     </Button>
                     {currentStep === 1 && (
-                        <Button onClick={handleConfirmMapping} variant="contained" disabled={isUploading || excelData.length === 0}>
-                            Lanjutkan ke Pratinjau
+                        <Button onClick={handleConfirmMapping} variant="contained" disabled={isUploading || rawExcelDataRows.length === 0 || Object.keys(columnMapping).length === 0}>
+                            {isUploading ? <CircularProgress size={24} /> : 'Lanjutkan ke Pratinjau'}
                         </Button>
                     )}
                     {currentStep === 2 && (
@@ -709,8 +842,8 @@ function StudentManagementPage() {
                             <Button onClick={() => setCurrentStep(1)} variant="outlined">
                                 Kembali ke Pemetaan
                             </Button>
-                            <Button onClick={handleImportSelectedStudents} variant="contained" disabled={isUploading || selectedStudentsToImport.length === 0}>
-                                {isUploading ? <CircularProgress size={24} /> : `Impor ${selectedStudentsToImport.length} Siswa`}
+                            <Button onClick={handleImportSelectedStudents} variant="contained" disabled={isUploading || selectedStudentsForImport.length === 0}>
+                                {isUploading ? <CircularProgress size={24} /> : `Impor ${selectedStudentsForImport.length} Siswa`}
                             </Button>
                         </>
                     )}
