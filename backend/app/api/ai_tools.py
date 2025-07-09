@@ -1,15 +1,16 @@
 # backend/app/api/ai_tools.py
 
 import json
-from flask import Blueprint, request, jsonify, current_app, send_file
+from flask import Blueprint, request, jsonify, current_app, send_file, after_this_request
 from app.services.ai_service import AIService
-from app.models.classroom_model import RPP, Kelas, Soal
+from app.models.classroom_model import RPP, Kelas, Soal, Ujian
 from app import db
-from flask_jwt_extended import jwt_required
-from app.api.auth import roles_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 import os
 import uuid
-from fpdf import FPDF # <-- Import FPDF (pastikan 'fpdf' dari 'fpdf2' yang diinstal)
+from fpdf import FPDF
+from app.api.auth import roles_required # <-- TAMBAHKAN BARIS INI
+
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
 
@@ -195,14 +196,14 @@ def kelola_satu_soal(id_soal):
             print(f"Error deleting soal set: {e}")
             return jsonify({'message': 'Gagal menghapus set soal.', 'details': str(e)}), 500
 
-# --- NEW ENDPOINT: Generate Exam PDF ---
+# --- NEW ENDPOINT: Generate Exam PDF (tanpa kunci jawaban & dengan pembersihan) ---
 @bp.route('/generate-exam-pdf', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_exam_pdf_endpoint():
     data = request.get_json()
     exam_title = data.get('exam_title', 'Ujian')
-    questions_data = data.get('questions', []) # Asumsi ini adalah list objek soal lengkap
+    questions_data = data.get('questions', [])
 
     if not questions_data:
         return jsonify({'message': 'Tidak ada soal yang diberikan untuk membuat ujian.'}), 400
@@ -211,31 +212,100 @@ def generate_exam_pdf_endpoint():
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, exam_title, 0, 1, 'C')
+    pdf.multi_cell(0, 10, exam_title, 0, 'C')
     pdf.ln(10)
 
     pdf.set_font("Arial", "", 12)
 
     for i, q_data in enumerate(questions_data):
         pdf.set_font("Arial", "B", 12)
-        pdf.multi_cell(0, 8, f"{i+1}. {q_data.get('pertanyaan', '')}")
+        question_text = f"{i+1}. {q_data.get('pertanyaan', '')}"
+        pdf.multi_cell(0, 8, question_text)
         
         if q_data.get('pilihan'):
             pdf.set_font("Arial", "", 10)
+            indent_options = 10
             for option_key, option_value in q_data['pilihan'].items():
-                pdf.multi_cell(0, 6, f"   {option_key}. {option_value}")
-            pdf.ln(1) # Spasi setelah pilihan
+                option_line = f"   {option_key}. {option_value}"
+                pdf.set_x(pdf.get_x() + indent_options)
+                pdf.multi_cell(pdf.w - pdf.l_margin - pdf.r_margin - indent_options, 6, option_line)
+                pdf.set_x(10)
+        
+        pdf.ln(5)
 
-        pdf.set_font("Arial", "I", 10) # Italic for answer
-        if q_data.get('jawaban_benar'):
-            pdf.cell(0, 6, f"   Jawaban Benar: {q_data['jawaban_benar']}")
-        elif q_data.get('jawaban_ideal'):
-            pdf.multi_cell(0, 6, f"   Jawaban Ideal: {q_data['jawaban_ideal']}")
-        pdf.ln(5) # Spasi setelah jawaban
+    temp_dir = os.path.join(current_app.root_path, 'temp_files')
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    unique_filename = f"ujian_{uuid.uuid4()}.pdf"
+    output_path = os.path.join(temp_dir, unique_filename)
+    
+    try:
+        pdf.output(output_path)
+    except Exception as e:
+        print(f"Error creating PDF: {e}")
+        current_app.logger.error("Error creating exam PDF", exc_info=True)
+        return jsonify({'message': f'Gagal membuat file PDF: {e}'}), 500
 
-    # Simpan PDF sementara
-    output_path = os.path.join(current_app.root_path, 'temp_exam.pdf')
-    pdf.output(output_path)
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(output_path)
+        except Exception as e:
+            current_app.logger.error(f"Error removing temporary PDF file: {e}")
+        return response
 
-    # Kirim file PDF sebagai respons
-    return send_file(output_path, as_attachment=True, download_name=f"{exam_title}.pdf", mimetype='application/pdf')
+    return send_file(output_path, as_attachment=True, download_name=f"{exam_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+
+# --- NEW ENDPOINT: Save Exam ---
+@bp.route('/ujian', methods=['POST'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def simpan_ujian():
+    data = request.get_json()
+    current_user_id = get_jwt_identity()
+
+    if not data or not all(k in data for k in ['judul', 'konten_json']):
+        return jsonify({'message': 'Data tidak lengkap. Pastikan judul dan konten_json terisi.'}), 400
+    
+    if not isinstance(data['konten_json'], list):
+        return jsonify({'message': 'Konten ujian harus berupa daftar soal.'}), 400
+
+    ujian_baru = Ujian(
+        judul=data['judul'],
+        konten_json=json.dumps(data['konten_json']),
+        user_id=current_user_id
+    )
+    db.session.add(ujian_baru)
+    db.session.commit()
+    return jsonify({'message': f'Ujian "{ujian_baru.judul}" berhasil disimpan!', 'id': ujian_baru.id}), 201
+
+# --- NEW ENDPOINT: Get All Ujian ---
+@bp.route('/ujian', methods=['GET'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def lihat_semua_ujian():
+    semua_ujian = Ujian.query.order_by(Ujian.tanggal_dibuat.desc()).all()
+    hasil = []
+    for ujian_set in semua_ujian:
+        hasil.append({
+            'id': ujian_set.id,
+            'judul': ujian_set.judul,
+            'tanggal_dibuat': ujian_set.tanggal_dibuat.strftime('%d %B %Y'),
+            'user_id': ujian_set.user_id
+        })
+    return jsonify(hasil)
+
+# --- NEW ENDPOINT: Get Ujian by ID ---
+@bp.route('/ujian/<int:id_ujian>', methods=['GET'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def lihat_satu_ujian(id_ujian):
+    ujian_set = Ujian.query.get_or_404(id_ujian)
+    konten = json.loads(ujian_set.konten_json)
+    return jsonify({
+        'id': ujian_set.id,
+        'judul': ujian_set.judul,
+        'konten_json': konten,
+        'tanggal_dibuat': ujian_set.tanggal_dibuat.strftime('%d %B %Y'),
+        'user_id': ujian_set.user_id
+    })

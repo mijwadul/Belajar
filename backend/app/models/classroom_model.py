@@ -1,7 +1,44 @@
+# backend/app/models/classroom_model.py
+
 from app import db
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import enum
+from sqlalchemy import or_
+
+# Definisikan Enum untuk peran pengguna
+class UserRole(enum.Enum):
+    SUPER_USER = 'Super User'
+    ADMIN = 'Admin'
+    GURU = 'Guru'
+
+# Buat kelas model User
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nama_lengkap = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256))
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.GURU)
+
+    def set_password(self, password):
+        """Membuat hash password yang aman."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Memeriksa apakah password yang dimasukkan cocok dengan hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        """Mengubah data user menjadi dictionary (tanpa password)."""
+        return {
+            'id': self.id,
+            'nama_lengkap': self.nama_lengkap,
+            'email': self.email,
+            'role': self.role.value
+        }
+
+    def __repr__(self):
+        return f'<User {self.nama_lengkap}>'
 
 kelas_siswa = db.Table('kelas_siswa',
     db.Column('kelas_id', db.Integer, db.ForeignKey('kelas.id'), primary_key=True),
@@ -29,17 +66,16 @@ class Kelas(db.Model):
         query = cls.query
 
         if search_query:
-            # Mencari berdasarkan nama_kelas atau mata_pelajaran (case-insensitive)
-            query = query.filter(
-                (cls.nama_kelas.ilike(f'%{search_query}%')) |
-                (cls.mata_pelajaran.ilike(f'%{search_query}%'))
-            )
+            query = query.filter(or_(
+                cls.nama_kelas.ilike(f'%{search_query}%'),
+                cls.mata_pelajaran.ilike(f'%{search_query}%')
+            ))
         
         if jenjang_filter:
             query = query.filter(cls.jenjang == jenjang_filter)
 
         if mata_pelajaran_filter:
-            query = query.filter(cls.mata_pelajaran.ilike(f'%{mata_pelajaran_filter}%')) # Menggunakan ilike untuk pencarian mata pelajaran yang lebih fleksibel
+            query = query.filter(cls.mata_pelajaran.ilike(f'%{mata_pelajaran_filter}%'))
 
         return query.order_by(cls.nama_kelas).all()
 
@@ -69,7 +105,6 @@ class Siswa(db.Model):
         query = cls.query.join(kelas_siswa).join(Kelas).filter(Kelas.id == kelas_id)
 
         if search_query:
-            # Mencari berdasarkan nama_lengkap (case-insensitive)
             query = query.filter(cls.nama_lengkap.ilike(f'%{search_query}%'))
         
         if jenis_kelamin_filter:
@@ -109,10 +144,10 @@ class Ujian(db.Model):
     __tablename__ = 'ujian'
     id = db.Column(db.Integer, primary_key=True)
     judul = db.Column(db.String(255), nullable=False)
-    tanggal_ujian = db.Column(db.DateTime, default=datetime.utcnow)
-    kelas_id = db.Column(db.Integer, db.ForeignKey('kelas.id'), nullable=False)
-    soal_id = db.Column(db.Integer, db.ForeignKey('soal.id'), nullable=False)
-    jawaban_siswa = db.relationship('JawabanSiswa', backref='ujian', lazy=True, cascade="all, delete-orphan")
+    konten_json = db.Column(db.Text, nullable=False)
+    tanggal_dibuat = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', name='fk_ujian_user_id')) # <-- TAMBAHKAN name='fk_ujian_user_id'
 
 class JawabanSiswa(db.Model):
     __tablename__ = 'jawaban_siswa'
@@ -121,37 +156,3 @@ class JawabanSiswa(db.Model):
     skor = db.Column(db.Float, nullable=True)
     ujian_id = db.Column(db.Integer, db.ForeignKey('ujian.id'), nullable=False)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False)
-
-# Definisikan Enum untuk peran pengguna
-class UserRole(enum.Enum):
-    SUPER_USER = 'Super User'
-    ADMIN = 'Admin'
-    GURU = 'Guru'
-
-# Buat kelas model User
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nama_lengkap = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256))
-    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.GURU)
-
-    def set_password(self, password):
-        """Membuat hash password yang aman."""
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        """Memeriksa apakah password yang dimasukkan cocok dengan hash."""
-        return check_password_hash(self.password_hash, password)
-
-    def to_dict(self):
-        """Mengubah data user menjadi dictionary (tanpa password)."""
-        return {
-            'id': self.id,
-            'nama_lengkap': self.nama_lengkap,
-            'email': self.email,
-            'role': self.role.value # .value akan mengambil string 'Guru', 'Admin', dll.
-        }
-
-    def __repr__(self):
-        return f'<User {self.nama_lengkap}>'
