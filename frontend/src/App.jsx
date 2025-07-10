@@ -25,6 +25,7 @@ import RppDetailPage from './pages/RppDetailPage';
 import QuizGeneratorPage from './pages/QuizGeneratorPage';
 import BankSoalPage from './pages/BankSoalPage';
 import SoalDetailPage from './pages/SoalDetailPage';
+import ExamLibraryPage from './pages/ExamLibraryPage';
 
 // Import komponen baru (DashboardPage)
 import DashboardPage from './pages/DashboardPage';
@@ -59,7 +60,6 @@ function App() {
                 <Route path="/kelas" element={<ClassListPage />} />
                 <Route path="/kelas/:id" element={<StudentManagementPage />} /> 
                 <Route path="/kelas/:id/absensi" element={<AttendancePage />} />
-                
                 <Route path="/generator-rpp" element={<RppGeneratorPage />} />
                 <Route path="/perpustakaan-rpp" element={<RppLibraryPage />} />
                 <Route path="/rpp/:id" element={<RppDetailPage />} />
@@ -67,7 +67,7 @@ function App() {
                 <Route path="/bank-soal" element={<BankSoalPage />} />
                 <Route path="/soal/:id" element={<SoalDetailPage />} />
                 <Route path="/exam-generator" element={<ExamGeneratorPage />} />
-
+                <Route path="/bank-ujian" element={<ExamLibraryPage />} />
                 {/* Rute Admin (dilindungi peran) */}
                 <Route element={<RoleBasedProtectedRoute allowedRoles={['Admin', 'Super User']} />}>
                   {/* Rute /admin/dashboard akan mengarah ke UserManagementPage */}

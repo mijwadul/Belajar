@@ -41,7 +41,8 @@ import PeopleIcon from '@mui/icons-material/People';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'; // Untuk Buat Ujian
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'; // Import AutoFixHighIcon
-
+// NEW: Import LibraryBooksIcon
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // <--- TAMBAHKAN BARIS INI
 
 import { isAuthenticated } from '../api/authService';
 // Import fungsi baru untuk total siswa, dan juga getKelas
@@ -135,6 +136,8 @@ function DashboardPage() {
                 { text: 'Generator Soal', icon: <QuizIcon />, path: '/generator-soal' },
                 { text: 'Bank Soal', icon: <FolderIcon />, path: '/bank-soal' },
                 { text: 'Buat Ujian', icon: <InsertDriveFileIcon />, path: '/exam-generator' },
+                // NEW: Tambahkan Bank Ujian Tersimpan
+                { text: 'Bank Ujian Tersimpan', icon: <LibraryBooksIcon />, path: '/bank-ujian' }, // <--- TAMBAHKAN BARIS INI
             ]
         },
         { text: 'Penilaian', icon: <FavoriteIcon />, path: '/penilaian' },

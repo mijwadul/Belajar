@@ -32,6 +32,8 @@ import PostAddIcon from '@mui/icons-material/PostAdd'; // Untuk Buat Ujian
 import AssessmentIcon from '@mui/icons-material/Assessment'; // Untuk Penilaian
 import PeopleIcon from '@mui/icons-material/People'; // Untuk Manajemen User
 import LogoutIcon from '@mui/icons-material/Logout'; // Untuk Logout
+// NEW: Import LibraryBooksIcon untuk Bank Ujian Tersimpan
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // <--- TAMBAHKAN BARIS INI
 
 // Pastikan Anda sudah menempatkan logo di folder 'src/assets/'
 import logo from '../../assets/logo.png';
@@ -166,6 +168,11 @@ function Navbar() {
                     <ListItemIcon><PostAddIcon fontSize="small" /></ListItemIcon>
                     <ListItemText>Buat Ujian</ListItemText>
                 </MenuItem>
+                {/* NEW: Menu item untuk Bank Ujian Tersimpan */}
+                <MenuItem onClick={() => handleMenuClick('/bank-ujian')}> {/* <--- TAMBAHKAN BARIS INI */}
+                    <ListItemIcon><LibraryBooksIcon fontSize="small" /></ListItemIcon> {/* <--- TAMBAHKAN BARIS INI */}
+                    <ListItemText>Bank Ujian Tersimpan</ListItemText> {/* <--- TAMBAHKAN BARIS INI */}
+                </MenuItem>
             </Menu>
 
             <Button color="inherit" component={RouterLink} to="/penilaian" startIcon={<AssessmentIcon />}>Penilaian</Button>
@@ -225,6 +232,11 @@ function Navbar() {
                 <MenuItem onClick={() => handleMenuClick('/exam-generator')} sx={{ pl: 4 }}>
                     <ListItemIcon><PostAddIcon fontSize="small" /></ListItemIcon>
                     <ListItemText>Buat Ujian</ListItemText>
+                </MenuItem>
+                {/* NEW: Menu item untuk Bank Ujian Tersimpan (mobile) */}
+                <MenuItem onClick={() => handleMenuClick('/bank-ujian')} sx={{ pl: 4 }}> {/* <--- TAMBAHKAN BARIS INI */}
+                    <ListItemIcon><LibraryBooksIcon fontSize="small" /></ListItemIcon> {/* <--- TAMBAHKAN BARIS INI */}
+                    <ListItemText>Bank Ujian Tersimpan</ListItemText> {/* <--- TAMBAHKAN BARIS INI */}
                 </MenuItem>
 
                 <MenuItem onClick={() => handleMenuClick('/penilaian')}>

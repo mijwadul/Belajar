@@ -3,14 +3,22 @@
 import json
 from flask import Blueprint, request, jsonify, current_app, send_file, after_this_request
 from app.services.ai_service import AIService
-from app.models.classroom_model import RPP, Kelas, Soal, Ujian
+from app.models.classroom_model import RPP, Kelas, Soal, Ujian 
 from app import db
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 import os
 import uuid
-from fpdf import FPDF
-from app.api.auth import roles_required # <-- TAMBAHKAN BARIS INI
+from app.api.auth import roles_required
 
+# Import ReportLab components
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
+from reportlab.lib.units import inch 
+import random 
+
+import io 
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
 
@@ -120,62 +128,58 @@ def generate_rpp_pdf_endpoint(id_rpp):
     rpp_title = rpp.judul
     rpp_content_markdown = rpp.konten_markdown
 
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.multi_cell(0, 10, rpp_title, 0, 'C')
-    pdf.ln(10)
+    # Menggunakan ReportLab untuk konsistensi dengan PDF ujian
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            leftMargin=inch, rightMargin=inch,
+                            topMargin=inch, bottomMargin=inch)
+    styles = getSampleStyleSheet()
 
-    pdf.set_font("Arial", "", 12)
-    
-    # Mengonversi Markdown ke teks sederhana untuk PDF
-    # Ini adalah konversi dasar, untuk rendering Markdown yang lebih kompleks di PDF
-    # mungkin memerlukan pustaka yang lebih canggih atau konversi HTML.
-    # Untuk saat ini, kita akan mengganti header markdown dengan font bold
-    # dan menangani baris baru.
-    
-    # Memisahkan konten per baris
+    # Define custom styles for RPP
+    styles.add(ParagraphStyle(name='RppTitleStyle', parent=styles['h1'],
+                              fontSize=18, leading=22, spaceAfter=18, alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='RppHeading1', parent=styles['h1'],
+                              fontSize=16, leading=18, spaceBefore=12, spaceAfter=6, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='RppHeading2', parent=styles['h2'],
+                              fontSize=14, leading=16, spaceBefore=10, spaceAfter=5, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='RppNormal', parent=styles['Normal'],
+                              fontSize=11, leading=13, spaceAfter=6, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle(name='RppListItem', parent=styles['Normal'],
+                              fontSize=11, leading=13, spaceAfter=3, leftIndent=20, bulletIndent=10))
+
+    story = []
+    story.append(Paragraph(rpp_title, styles['RppTitleStyle']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Parse Markdown content (basic parsing)
     lines = rpp_content_markdown.split('\n')
-    
     for line in lines:
-        stripped_line = line.strip()
-        if stripped_line.startswith('## '):
-            pdf.set_font("Arial", "B", 14) # Sub-heading
-            pdf.multi_cell(0, 8, stripped_line[3:])
-            pdf.ln(2)
-        elif stripped_line.startswith('# '):
-            pdf.set_font("Arial", "B", 16) # Main heading
-            pdf.multi_cell(0, 10, stripped_line[2:])
-            pdf.ln(5)
+        if line.strip().startswith('### '):
+            story.append(Paragraph(line.replace('### ', ''), styles['RppHeading2']))
+        elif line.strip().startswith('## '):
+            story.append(Paragraph(line.replace('## ', ''), styles['RppHeading1']))
+        elif line.strip().startswith('* ') or line.strip().startswith('- '):
+            story.append(Paragraph(line.strip().replace('* ', '').replace('- ', ''), styles['RppListItem'], bulletText='•'))
+        elif line.strip():
+            story.append(Paragraph(line.strip(), styles['RppNormal']))
         else:
-            pdf.set_font("Arial", "", 12) # Normal text
-            pdf.multi_cell(0, 7, stripped_line)
-            if stripped_line: # Hanya tambahkan spasi jika baris tidak kosong
-                pdf.ln(2) # Spasi antar baris
-    
-    temp_dir = os.path.join(current_app.root_path, 'temp_files')
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    unique_filename = f"rpp_{uuid.uuid4()}.pdf"
-    output_path = os.path.join(temp_dir, unique_filename)
-    
+            story.append(Spacer(1, 0.1 * inch))
+
     try:
-        pdf.output(output_path)
+        doc.build(story)
     except Exception as e:
         print(f"Error creating RPP PDF: {e}")
         current_app.logger.error("Error creating RPP PDF", exc_info=True)
         return jsonify({'message': f'Gagal membuat file PDF RPP: {e}'}), 500
 
-    @after_this_request
-    def remove_file(response):
-        try:
-            os.remove(output_path)
-        except Exception as e:
-            current_app.logger.error(f"Error removing temporary RPP PDF file: {e}")
-        return response
+    # HAPUS: Tidak perlu menghapus file karena kita mengirim BytesIO langsung
+    # @after_this_request
+    # def remove_file_on_request_completion(response):
+    #     return response
 
-    return send_file(output_path, as_attachment=True, download_name=f"{rpp_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+    buffer.seek(0) # Penting: reset buffer position to the beginning before sending
+    return send_file(buffer, as_attachment=True, download_name=f"{rpp_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+
 
 # --- RUTE UNTUK SOAL ---
 
@@ -261,7 +265,7 @@ def kelola_satu_soal(id_soal):
             print(f"Error deleting soal set: {e}")
             return jsonify({'message': 'Gagal menghapus set soal.', 'details': str(e)}), 500
 
-# --- NEW ENDPOINT: Generate Exam PDF (tanpa kunci jawaban & dengan pembersihan) ---
+# --- NEW ENDPOINT: Generate Exam PDF (dengan layout, pengacakan, dan info siswa) ---
 @bp.route('/generate-exam-pdf', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
@@ -269,57 +273,80 @@ def generate_exam_pdf_endpoint():
     data = request.get_json()
     exam_title = data.get('exam_title', 'Ujian')
     questions_data = data.get('questions', [])
+    layout_settings = data.get('layout', {}) 
 
     if not questions_data:
         return jsonify({'message': 'Tidak ada soal yang diberikan untuk membuat ujian.'}), 400
 
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.multi_cell(0, 10, exam_title, 0, 'C')
-    pdf.ln(10)
+    # Ambil pengaturan layout dari frontend
+    shuffle_questions = layout_settings.get('shuffle_questions', False)
+    shuffle_answers = layout_settings.get('shuffle_answers', False)
+    student_info_fields = layout_settings.get('student_info_fields', []) 
 
-    pdf.set_font("Arial", "", 12)
+    # Terapkan pengacakan soal jika diaktifkan
+    if shuffle_questions:
+        random.shuffle(questions_data)
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            leftMargin=inch, rightMargin=inch,
+                            topMargin=inch, bottomMargin=inch)
+    styles = getSampleStyleSheet()
+
+    # Define custom styles
+    styles.add(ParagraphStyle(name='TitleStyle', parent=styles['h1'],
+                              fontSize=18, leading=22, spaceAfter=18, alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='InfoFieldStyle', parent=styles['Normal'],
+                              fontSize=10, leading=12, spaceAfter=6, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='QuestionStyle', parent=styles['Normal'],
+                              fontSize=11, leading=13, spaceAfter=8, alignment=TA_JUSTIFY))
+    styles.add(ParagraphStyle(name='OptionStyle', parent=styles['Normal'],
+                              fontSize=10, leading=12, spaceAfter=2, leftIndent=20))
+    styles.add(ParagraphStyle(name='SectionTitleStyle', parent=styles['h2'],
+                              fontSize=14, leading=16, spaceBefore=18, spaceAfter=8, alignment=TA_LEFT))
+
+    story = []
+
+    # Tambahkan judul ujian
+    story.append(Paragraph(exam_title, styles['TitleStyle']))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Tambahkan kolom informasi siswa jika diaktifkan
+    for field_label in student_info_fields:
+        story.append(Paragraph(f"{field_label}: ___________________________________________", styles['InfoFieldStyle']))
+    story.append(Spacer(1, 0.3 * inch)) 
 
     for i, q_data in enumerate(questions_data):
-        pdf.set_font("Arial", "B", 12)
         question_text = f"{i+1}. {q_data.get('pertanyaan', '')}"
-        pdf.multi_cell(0, 8, question_text)
+        story.append(Paragraph(question_text, styles['QuestionStyle']))
         
         if q_data.get('pilihan'):
-            pdf.set_font("Arial", "", 10)
-            indent_options = 10
-            for option_key, option_value in q_data['pilihan'].items():
-                option_line = f"   {option_key}. {option_value}"
-                pdf.set_x(pdf.get_x() + indent_options)
-                pdf.multi_cell(pdf.w - pdf.l_margin - pdf.r_margin - indent_options, 6, option_line)
-                pdf.set_x(10)
+            option_items = list(q_data['pilihan'].items())
+            if shuffle_answers:
+                random.shuffle(option_items) 
+            
+            for key, value in option_items:
+                story.append(Paragraph(f"   {key}. {value}", styles['OptionStyle']))
+        elif q_data.get('jawaban_ideal'):
+            story.append(Paragraph("   Jawaban: ____________________________________________________________________", styles['OptionStyle']))
+            story.append(Spacer(1, 0.5 * inch)) 
         
-        pdf.ln(5)
+        story.append(Spacer(1, 0.1 * inch)) 
 
-    temp_dir = os.path.join(current_app.root_path, 'temp_files')
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    unique_filename = f"ujian_{uuid.uuid4()}.pdf"
-    output_path = os.path.join(temp_dir, unique_filename)
-    
     try:
-        pdf.output(output_path)
+        doc.build(story)
     except Exception as e:
         print(f"Error creating PDF: {e}")
         current_app.logger.error("Error creating exam PDF", exc_info=True)
         return jsonify({'message': f'Gagal membuat file PDF: {e}'}), 500
 
-    @after_this_request
-    def remove_file(response):
-        try:
-            os.remove(output_path)
-        except Exception as e:
-            current_app.logger.error(f"Error removing temporary PDF file: {e}")
-        return response
+    # HAPUS: Tidak perlu menghapus file karena kita mengirim BytesIO langsung
+    # @after_this_request
+    # def remove_file_on_request_completion(response):
+    #     return response
 
-    return send_file(output_path, as_attachment=True, download_name=f"{exam_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+    buffer.seek(0) # Penting: reset buffer position to the beginning before sending
+    return send_file(buffer, as_attachment=True, download_name=f"{exam_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
 
 # --- NEW ENDPOINT: Save Exam ---
 @bp.route('/ujian', methods=['POST'])
@@ -329,16 +356,19 @@ def simpan_ujian():
     data = request.get_json()
     current_user_id = get_jwt_identity()
 
-    if not data or not all(k in data for k in ['judul', 'konten_json']):
-        return jsonify({'message': 'Data tidak lengkap. Pastikan judul dan konten_json terisi.'}), 400
+    if not data or not all(k in data for k in ['exam_title', 'questions']):
+        return jsonify({'message': 'Data tidak lengkap. Pastikan judul ujian dan daftar soal terisi.'}), 400
     
-    if not isinstance(data['konten_json'], list):
-        return jsonify({'message': 'Konten ujian harus berupa daftar soal.'}), 400
+    if not isinstance(data['questions'], list):
+        return jsonify({'message': 'Daftar soal ujian harus berupa array.'}), 400
+
+    pengaturan_layout = data.get('layout', {}) 
 
     ujian_baru = Ujian(
-        judul=data['judul'],
-        konten_json=json.dumps(data['konten_json']),
-        user_id=current_user_id
+        judul=data['exam_title'], 
+        konten_json=json.dumps(data['questions']), 
+        user_id=current_user_id,
+        pengaturan_layout=json.dumps(pengaturan_layout) 
     )
     db.session.add(ujian_baru)
     db.session.commit()
@@ -350,14 +380,7 @@ def simpan_ujian():
 @roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_semua_ujian():
     semua_ujian = Ujian.query.order_by(Ujian.tanggal_dibuat.desc()).all()
-    hasil = []
-    for ujian_set in semua_ujian:
-        hasil.append({
-            'id': ujian_set.id,
-            'judul': ujian_set.judul,
-            'tanggal_dibuat': ujian_set.tanggal_dibuat.strftime('%d %B %Y'),
-            'user_id': ujian_set.user_id
-        })
+    hasil = [ujian_set.to_dict() for ujian_set in semua_ujian] 
     return jsonify(hasil)
 
 # --- NEW ENDPOINT: Get Ujian by ID ---
@@ -366,11 +389,14 @@ def lihat_semua_ujian():
 @roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_satu_ujian(id_ujian):
     ujian_set = Ujian.query.get_or_404(id_ujian)
-    konten = json.loads(ujian_set.konten_json)
-    return jsonify({
-        'id': ujian_set.id,
-        'judul': ujian_set.judul,
-        'konten_json': konten,
-        'tanggal_dibuat': ujian_set.tanggal_dibuat.strftime('%d %B %Y'),
-        'user_id': ujian_set.user_id
-    })
+    return jsonify(ujian_set.to_dict())
+
+# --- Fungsi untuk menghapus Ujian ---
+@bp.route('/ujian/<int:id_ujian>', methods=['DELETE'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def delete_ujian(id_ujian):
+    ujian_set = Ujian.query.get_or_404(id_ujian)
+    db.session.delete(ujian_set)
+    db.session.commit()
+    return jsonify({'message': f'Ujian "{ujian_set.judul}" berhasil dihapus!'}), 200

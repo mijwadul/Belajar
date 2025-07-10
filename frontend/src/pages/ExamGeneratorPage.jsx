@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllSoal, getSoalById, downloadExamPdf } from '../api/aiService'; // Import downloadExamPdf
+import { getAllSoal, getSoalById, downloadExamPdf, saveExam } from '../api/aiService'; 
 import {
     Container, Box, Typography, Grid, Paper,
     TextField, InputAdornment, IconButton, Button,
@@ -10,28 +10,40 @@ import {
     List, ListItem, ListItemText, Checkbox, FormControlLabel,
     Collapse, Divider, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
-import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer'; // Untuk ikon judul halaman
+import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer'; 
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import PostAddIcon from '@mui/icons-material/PostAdd'; // Ikon untuk Buat Ujian
-import DownloadIcon from '@mui/icons-material/Download'; // Ikon untuk Unduh
+import PostAddIcon from '@mui/icons-material/PostAdd'; 
+import DownloadIcon from '@mui/icons-material/Download'; 
+import SaveIcon from '@mui/icons-material/Save';
 
 function ExamGeneratorPage() {
     const navigate = useNavigate();
     const [soalSets, setSoalSets] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [expandedSoalSetId, setExpandedSoalSetId] = useState(null); // ID set soal yang sedang diperluas
-    const [selectedQuestions, setSelectedQuestions] = useState([]); // Array objek soal yang dipilih untuk ujian
+    const [expandedSoalSetId, setExpandedSoalSetId] = useState(null);
+    const [selectedQuestions, setSelectedQuestions] = useState([]);
     const [examPreview, setExamPreview] = useState('');
-    const [examTitle, setExamTitle] = useState('Ujian Baru'); // Untuk judul ujian di PDF
+    const [examTitle, setExamTitle] = useState('Ujian Baru');
 
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-    const [isDownloading, setIsDownloading] = useState(false); // State untuk loading download
+    const [isDownloading, setIsDownloading] = useState(false); 
+    const [isSaving, setIsSaving] = useState(false);
+
+    const [shuffleQuestions, setShuffleQuestions] = useState(false);
+    const [shuffleAnswers, setShuffleAnswers] = useState(false);
+    // NEW: State untuk pilihan informasi siswa
+    const [studentInfoFields, setStudentInfoFields] = useState({
+        namaSiswa: true,
+        nomorInduk: true,
+        nomorAbsen: true,
+    });
+    const [examCategories, setExamCategories] = useState([]); 
 
     const showSnackbar = (message, severity) => {
         setSnackbarMessage(message);
@@ -74,7 +86,7 @@ function ExamGeneratorPage() {
             const targetSoalSet = soalSets.find(s => s.id === soalSetId);
             if (targetSoalSet && !targetSoalSet.detailedQuestions) {
                 try {
-                    setIsLoading(true); // Set loading while fetching detail
+                    setIsLoading(true); 
                     const detailedData = await getSoalById(soalSetId);
                     setSoalSets(prevSets => prevSets.map(s => 
                         s.id === soalSetId ? { ...s, detailedQuestions: detailedData.konten_json.soal } : s
@@ -84,7 +96,7 @@ function ExamGeneratorPage() {
                     console.error("Gagal memuat detail soal:", error);
                     showSnackbar('Gagal memuat detail soal untuk set ini.', 'error');
                 } finally {
-                    setIsLoading(false); // End loading
+                    setIsLoading(false); 
                 }
             } else {
                 setExpandedSoalSetId(soalSetId);
@@ -94,8 +106,6 @@ function ExamGeneratorPage() {
 
     const handleQuestionSelect = (question, soalSetId) => {
         setSelectedQuestions(prevSelected => {
-            // Gunakan ID unik untuk setiap soal jika tersedia, jika tidak kombinasi soalSetId dan pertanyaan
-            // Asumsi setiap pertanyaan dalam satu soalSet unik
             const questionIdentifier = `${soalSetId}-${question.pertanyaan}`; 
             
             const isSelected = prevSelected.some(q => 
@@ -112,6 +122,24 @@ function ExamGeneratorPage() {
         });
     };
 
+    // Helper function to shuffle an array
+    const shuffleArray = (array) => {
+        const newArray = [...array];
+        for (let i = newArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; 
+        }
+        return newArray;
+    };
+
+    // NEW: Handler untuk perubahan checkbox info siswa
+    const handleStudentInfoFieldChange = (event) => {
+        setStudentInfoFields({
+            ...studentInfoFields,
+            [event.target.name]: event.target.checked,
+        });
+    };
+
     const handleGenerateExam = () => {
         if (selectedQuestions.length === 0) {
             showSnackbar('Pilih setidaknya satu soal untuk membuat pratinjau ujian.', 'warning');
@@ -119,15 +147,33 @@ function ExamGeneratorPage() {
             return;
         }
 
-        let previewContent = `=== ${examTitle.toUpperCase()} ===\n\n`;
-        selectedQuestions.forEach((item, index) => {
+        let questionsForPreview = [...selectedQuestions];
+
+        if (shuffleQuestions) {
+            questionsForPreview = shuffleArray(questionsForPreview);
+        }
+
+        // NEW: Tambahkan info siswa ke pratinjau
+        let infoFieldsPreview = '';
+        if (studentInfoFields.namaSiswa) infoFieldsPreview += 'Nama Siswa: ______________\n';
+        if (studentInfoFields.nomorInduk) infoFieldsPreview += 'Nomor Induk: _____________\n';
+        if (studentInfoFields.nomorAbsen) infoFieldsPreview += 'Nomor Absen: _____________\n';
+        if (infoFieldsPreview) infoFieldsPreview += '\n';
+
+        let previewContent = `=== ${examTitle.toUpperCase()} ===\n\n${infoFieldsPreview}`; // Gabungkan info siswa
+        questionsForPreview.forEach((item, index) => {
             const q = item.question;
             previewContent += `${index + 1}. ${q.pertanyaan}\n`;
+            
             if (q.pilihan) {
-                Object.entries(q.pilihan).forEach(([key, value]) => {
+                let options = Object.entries(q.pilihan);
+                if (shuffleAnswers) {
+                    options = shuffleArray(options);
+                }
+                options.forEach(([key, value]) => {
                     previewContent += `   ${key}. ${value}\n`;
                 });
-                previewContent += `   Kunci Jawaban: ${q.jawaban_benar}\n`;
+                previewContent += `   Kunci Jawaban: ${q.jawaban_benar}\n`; 
             } else if (q.jawaban_ideal) {
                 previewContent += `   Jawaban Ideal: ${q.jawaban_ideal}\n`;
             }
@@ -149,26 +195,82 @@ function ExamGeneratorPage() {
 
         setIsDownloading(true);
         try {
-            const questionIds = selectedQuestions.map(item => ({
-                id: item.question.id, // Pastikan soal individual memiliki ID jika disimpan terpisah
-                // Jika tidak ada ID unik per soal, kita perlu mengirim struktur soal lengkap
-                // Atau modifikasi backend untuk menerima array objek soal penuh.
-                // Untuk contoh ini, saya akan mengirimkan struktur lengkap per soal,
-                // karena ID unik soal individual mungkin belum ada di database Anda.
+            // NEW: Buat array berisi label field siswa yang dipilih
+            const selectedStudentInfoLabels = [];
+            if (studentInfoFields.namaSiswa) selectedStudentInfoLabels.push('Nama Siswa');
+            if (studentInfoFields.nomorInduk) selectedStudentInfoLabels.push('Nomor Induk/NISN'); // Sesuaikan label
+            if (studentInfoFields.nomorAbsen) selectedStudentInfoLabels.push('Nomor Absen');
+
+            const layoutSettings = {
+                shuffle_questions: shuffleQuestions,
+                shuffle_answers: shuffleAnswers,
+                student_info_fields: selectedStudentInfoLabels, // Kirim ini ke backend
+                categories: examCategories 
+            };
+
+            const questionsForPdf = selectedQuestions.map(item => ({
                 pertanyaan: item.question.pertanyaan,
                 pilihan: item.question.pilihan,
                 jawaban_benar: item.question.jawaban_benar,
-                jawaban_ideal: item.question.jawaban_ideal
+                jawaban_ideal: item.question.jawaban_ideal,
+                tipe_soal: item.question.pilihan ? 'Pilihan Ganda' : 'Esai'
             }));
 
-            // Panggil fungsi downloadExamPdf dari aiService.js
-            await downloadExamPdf(examTitle, questionIds);
+            await downloadExamPdf(examTitle, questionsForPdf, layoutSettings);
             showSnackbar('Ujian berhasil diunduh!', 'success');
         } catch (error) {
             console.error("Gagal mengunduh ujian:", error);
             showSnackbar(error.message || 'Gagal mengunduh ujian. Silakan coba lagi.', 'error');
         } finally {
             setIsDownloading(false);
+        }
+    };
+
+    const handleSaveExam = async () => {
+        if (selectedQuestions.length === 0) {
+            showSnackbar('Pilih setidaknya satu soal untuk menyimpan ujian.', 'warning');
+            return;
+        }
+        if (!examTitle.trim()) {
+            showSnackbar('Judul ujian tidak boleh kosong untuk disimpan.', 'warning');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            // NEW: Buat array berisi label field siswa yang dipilih
+            const selectedStudentInfoLabels = [];
+            if (studentInfoFields.namaSiswa) selectedStudentInfoLabels.push('Nama Siswa');
+            if (studentInfoFields.nomorInduk) selectedStudentInfoLabels.push('Nomor Induk/NISN'); // Sesuaikan label
+            if (studentInfoFields.nomorAbsen) selectedStudentInfoLabels.push('Nomor Absen');
+
+            const examData = {
+                exam_title: examTitle,
+                questions: selectedQuestions.map(item => ({
+                    pertanyaan: item.question.pertanyaan,
+                    pilihan: item.question.pilihan,
+                    jawaban_benar: item.question.jawaban_benar,
+                    jawaban_ideal: item.question.jawaban_ideal,
+                    tipe_soal: item.question.pilihan ? 'Pilihan Ganda' : 'Esai'
+                })),
+                layout: {
+                    shuffle_questions: shuffleQuestions,
+                    shuffle_answers: shuffleAnswers,
+                    student_info_fields: selectedStudentInfoLabels, // Kirim ini ke backend
+                    categories: examCategories 
+                }
+            };
+            
+            const response = await saveExam(examData);
+            showSnackbar('Ujian berhasil disimpan!', 'success');
+            console.log("Ujian berhasil disimpan:", response);
+            // Opsional: navigasi ke halaman Bank Ujian Tersimpan setelah berhasil menyimpan
+            // navigate('/bank-ujian'); 
+        } catch (error) {
+            console.error("Gagal menyimpan ujian:", error);
+            showSnackbar(error.message || 'Gagal menyimpan ujian. Silakan coba lagi.', 'error');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -290,7 +392,7 @@ function ExamGeneratorPage() {
                     </Paper>
                 </Grid>
 
-                {/* Kolom Kanan: Pratinjau Ujian & Tombol Generate/Download */}
+                {/* Kolom Kanan: Pratinjau Ujian & Tombol Generate/Download/Save */}
                 <Grid item xs={12} md={6}>
                     <Paper elevation={3} sx={{ p: 3, borderRadius: '12px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h5" component="h2" gutterBottom>
@@ -304,7 +406,41 @@ function ExamGeneratorPage() {
                             onChange={(e) => setExamTitle(e.target.value)}
                             sx={{ mb: 2 }}
                         />
+
+                        {/* Opsi Layout */}
+                        <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle1" gutterBottom>Pengaturan Layout:</Typography>
+                            <FormControlLabel
+                                control={<Checkbox checked={shuffleQuestions} onChange={(e) => setShuffleQuestions(e.target.checked)} />}
+                                label="Acak Urutan Soal"
+                                sx={{ mb: 0.5 }}
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={shuffleAnswers} onChange={(e) => setShuffleAnswers(e.target.checked)} />}
+                                label="Acak Pilihan Jawaban (Pilihan Ganda)"
+                                sx={{ mb: 0.5 }}
+                            />
+                            <Divider sx={{ my: 1 }} />
+                            {/* NEW: Opsi Informasi Siswa */}
+                            <Typography variant="subtitle1" sx={{ mt: 1 }}>Informasi Siswa pada Ujian:</Typography>
+                            <FormControlLabel
+                                control={<Checkbox checked={studentInfoFields.namaSiswa} onChange={handleStudentInfoFieldChange} name="namaSiswa" />}
+                                label="Nama Siswa"
+                                sx={{ mb: 0.5 }}
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={studentInfoFields.nomorInduk} onChange={handleStudentInfoFieldChange} name="nomorInduk" />}
+                                label="Nomor Induk/NISN"
+                                sx={{ mb: 0.5 }}
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={studentInfoFields.nomorAbsen} onChange={handleStudentInfoFieldChange} name="nomorAbsen" />}
+                                label="Nomor Absen"
+                                sx={{ mb: 0.5 }}
+                            />
+                        </Box>
                         <Divider sx={{ mb: 2 }} />
+
                         <Box sx={{ flexGrow: 1, maxHeight: '40vh', overflowY: 'auto', p: 1, border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#f9f9f9', mb: 3 }}>
                             {selectedQuestions.length === 0 ? (
                                 <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>
@@ -346,12 +482,24 @@ function ExamGeneratorPage() {
                         
                         <Button
                             variant="contained"
+                            color="primary"
+                            fullWidth
+                            startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                            onClick={handleSaveExam}
+                            disabled={selectedQuestions.length === 0 || !examTitle.trim() || isSaving}
+                            sx={{ py: 1.5, borderRadius: '8px', mt: 3 }}
+                        >
+                            {isSaving ? 'Menyimpan...' : 'Simpan Ujian'}
+                        </Button>
+                        
+                        <Button
+                            variant="contained"
                             color="success"
                             fullWidth
                             startIcon={isDownloading ? <CircularProgress size={20} color="inherit" /> : <DownloadIcon />}
                             onClick={handleDownloadExamPdf}
                             disabled={selectedQuestions.length === 0 || !examTitle.trim() || isDownloading}
-                            sx={{ py: 1.5, borderRadius: '8px', mt: 3 }}
+                            sx={{ py: 1.5, borderRadius: '8px', mt: 2 }}
                         >
                             {isDownloading ? 'Mengunduh...' : 'Unduh Ujian (PDF)'}
                         </Button>

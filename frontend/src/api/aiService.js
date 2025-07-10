@@ -275,39 +275,121 @@ export const deleteSoal = async (idSoal) => {
     }
 };
 
-export const downloadExamPdf = async (examTitle, questionsData) => {
+// Fix: Removed duplicate 'export' keyword
+export const downloadExamPdf = async (examTitle, questions, layoutSettings = {}) => { // Tambahkan layoutSettings
     try {
-        const response = await fetch(`${API_URL}/generate-exam-pdf`, {
+        const response = await fetch(`${API_URL}/generate-exam-pdf`, { // Updated endpoint name to match backend
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': getAuthHeader()
             },
-            body: JSON.stringify({
-                exam_title: examTitle,
-                questions: questionsData // Kirim array objek soal lengkap
+            body: JSON.stringify({ 
+                exam_title: examTitle, 
+                questions: questions,
+                layout: layoutSettings // Kirim layout settings ke backend
             }),
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Gagal mengunduh ujian PDF.');
+            throw new Error(errorData.message || 'Gagal mengunduh PDF ujian.');
         }
 
-        // Tangani respons file
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${examTitle.replace(/[^a-z0-9]/gi, '_') || 'Ujian'}.pdf`; // Nama file
+        a.download = `${examTitle.replace(/[^a-zA-Z0-9]/g, '_')}_ujian.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url); // Bersihkan URL objek
-
-        return { message: 'Ujian PDF berhasil diunduh!' };
+        window.URL.revokeObjectURL(url);
+        return { message: 'PDF berhasil diunduh' };
     } catch (error) {
         console.error("Error downloading exam PDF:", error);
+        throw error;
+    }
+};
+
+// NEW: Fungsi untuk mendapatkan semua Ujian
+export const getAllExams = async () => {
+    try {
+        const response = await fetch(`${API_URL}/ujian`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal memuat daftar ujian');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching all Exams:", error);
+        throw error;
+    }
+};
+
+// NEW: Fungsi untuk mendapatkan Ujian berdasarkan ID (jika diperlukan detail spesifik)
+export const getExamById = async (idUjian) => {
+    try {
+        const authHeader = getAuthHeader();
+        console.log("Authorization Header for getExamById:", authHeader); // DIAGNOSIS
+        const response = await fetch(`${API_URL}/ujian/${idUjian}`, {
+            headers: {
+                'Authorization': authHeader
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal memuat ujian dengan ID ${idUjian}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching Exam with ID ${idUjian}:`, error);
+        throw error;
+    }
+};
+
+// NEW: Fungsi untuk menghapus Ujian berdasarkan ID
+export const deleteExam = async (idUjian) => {
+    try {
+        const response = await fetch(`${API_URL}/ujian/${idUjian}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Gagal menghapus ujian dengan ID ${idUjian}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error deleting Exam with ID ${idUjian}:`, error);
+        throw error;
+    }
+};
+
+// --- Fungsi untuk menyimpan Ujian (dengan tambahan layout) ---
+export const saveExam = async (examData) => {
+    try {
+        const response = await fetch(`${API_URL}/ujian`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(examData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menyimpan ujian');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error saving exam:", error);
         throw error;
     }
 };
