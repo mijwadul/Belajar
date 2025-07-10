@@ -78,18 +78,11 @@ const ExamLibraryPage = () => {
 
     const handleDownloadExam = async (examTitle, questionsData, layoutSettings) => {
         try {
-            if (!questionsData || !Array.isArray(questionsData)) {
-                showSnackbar('Data soal tidak valid untuk diunduh.', 'warning');
-                return;
-            }
-            if (!layoutSettings || typeof layoutSettings !== 'object') {
-                layoutSettings = {}; 
-            }
-
+            // Validasi questionsData dipindahkan ke aiService.js
             await downloadExamPdf(examTitle, questionsData, layoutSettings);
             showSnackbar('Ujian PDF berhasil diunduh!', 'success');
         } catch (err) {
-            showSnackbar(`Gagal mengunduh ujian PDF: ${err.message}`, 'error');
+            showSnackbar(`${err.message}`, 'error'); // Tampilkan pesan error dari aiService.js
             console.error("Failed to download exam PDF:", err);
         }
     };
@@ -132,6 +125,13 @@ const ExamLibraryPage = () => {
             const questions = originalExam.konten_json; // Daftar soal asli
             const originalLayout = originalExam.layout || {}; // Layout asli
 
+            // Validasi questionsData dari originalExam - dipindahkan ke aiService.js
+            // if (!questions || !Array.isArray(questions) || questions.length === 0) {
+            //     showSnackbar('Data soal ujian tidak valid untuk membuat versi baru.', 'warning');
+            //     setIsGeneratingVersion(false);
+            //     return;
+            // }
+
             // 2. Buat judul baru untuk versi acak
             const timestamp = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const newExamTitle = `${originalTitle} (Versi Acak - ${timestamp})`;
@@ -146,10 +146,10 @@ const ExamLibraryPage = () => {
 
             // 4. Unduh PDF ujian dengan pengaturan acak
             await downloadExamPdf(newExamTitle, questions, newLayoutSettings);
-            showSnackbar(`Versi baru ujian "${originalTitle}" berhasil dibuat dan diunduh!`, 'success');
+            showSnackbar(`Versi baru ujian "${newExamTitle}" berhasil dibuat dan diunduh!`, 'success'); // Update snackbar message
 
         } catch (err) {
-            showSnackbar(`Gagal membuat versi baru ujian: ${err.message}`, 'error');
+            showSnackbar(`${err.message}`, 'error'); // Tampilkan pesan error dari aiService.js
             console.error("Failed to create new exam version:", err);
         } finally {
             setIsGeneratingVersion(false);
@@ -190,23 +190,24 @@ const ExamLibraryPage = () => {
                 <TableContainer component={Paper} elevation={3} sx={{ borderRadius: '12px', overflow: 'hidden' }}>
                     <Table stickyHeader aria-label="bank ujian table">
                         <TableHead>
-                            <TableRow sx={{ bgcolor: 'primary.light' }}>
-                                <TableCell sx={{ fontWeight: 'bold', color: 'common.white' }}>Judul Ujian</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: 'common.white' }}>Jumlah Soal</TableCell>
-                                <TableCell sx={{ fontWeight: 'bold', color: 'common.white' }}>Tanggal Dibuat</TableCell>
-                                <TableCell align="center" sx={{ fontWeight: 'bold', color: 'common.white' }}>Aksi</TableCell>
+                            <TableRow sx={{ bgcolor: '#1976d2' }}> {/* Mengubah primary.main menjadi warna biru solid */}
+                                <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Judul Ujian</TableCell> {/* Mengubah primary.contrastText menjadi hitam */}
+                                <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Jumlah Soal</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Tanggal Dibuat</TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 'bold', color: '#000000' }}>Aksi</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {exams.map((exam) => (
                                 <TableRow key={exam.id} hover>
                                     <TableCell>
+                                        {/* Menggunakan Typography dan Link agar terlihat seperti RPP Library */}
                                         <Button
                                             variant="text"
                                             onClick={() => handleViewExamDetails(exam.id)}
                                             sx={{ textTransform: 'none', justifyContent: 'flex-start', p: 0 }}
                                         >
-                                            <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 'medium' }}>
+                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
                                                 {exam.judul}
                                             </Typography>
                                         </Button>
@@ -222,35 +223,36 @@ const ExamLibraryPage = () => {
                                         </Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                            {/* NEW: Tombol Buat Versi Baru */}
-                                            <Button
-                                                variant="outlined"
-                                                size="small"
-                                                startIcon={isGeneratingVersion ? <CircularProgress size={16} /> : <ShuffleIcon />}
-                                                onClick={() => handleCreateNewVersion(exam.id, exam.judul)}
-                                                disabled={isGeneratingVersion}
-                                            >
-                                                {isGeneratingVersion ? 'Membuat...' : 'Buat Versi Baru'}
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                size="small"
-                                                startIcon={<DownloadIcon />}
-                                                onClick={() => handleDownloadExam(exam.judul, exam.konten_json, exam.layout || {})}
-                                            >
-                                                Unduh PDF
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                color="error"
-                                                size="small"
-                                                startIcon={<DeleteIcon />}
-                                                onClick={() => handleDeleteExam(exam.id, exam.judul)}
-                                            >
-                                                Hapus
-                                            </Button>
-                                        </Box>
+                                        <IconButton
+                                            aria-label="view"
+                                            onClick={() => handleViewExamDetails(exam.id)}
+                                            color="info"
+                                        >
+                                            <VisibilityIcon />
+                                        </IconButton>
+                                        {/* Tombol Buat Versi Baru sebagai IconButton */}
+                                        <IconButton
+                                            aria-label="create new version"
+                                            onClick={() => handleCreateNewVersion(exam.id, exam.judul)}
+                                            disabled={isGeneratingVersion}
+                                            color="primary"
+                                        >
+                                            {isGeneratingVersion ? <CircularProgress size={20} /> : <ShuffleIcon />}
+                                        </IconButton>
+                                        <IconButton
+                                            aria-label="download"
+                                            onClick={() => handleDownloadExam(exam.judul, exam.konten_json, exam.layout || {})}
+                                            color="success"
+                                        >
+                                            <DownloadIcon />
+                                        </IconButton>
+                                        <IconButton
+                                            aria-label="delete"
+                                            onClick={() => handleDeleteExam(exam.id, exam.judul)}
+                                            color="error"
+                                        >
+                                            <DeleteIcon />
+                                        </IconButton>
                                     </TableCell>
                                 </TableRow>
                             ))}

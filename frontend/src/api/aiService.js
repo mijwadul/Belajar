@@ -1,8 +1,8 @@
 // frontend/src/api/aiService.js
 
-import { getAuthHeader } from './authService'; // Import fungsi untuk mendapatkan header otorisasi
+import { getAuthHeader } from './authService';
 
-const API_URL = 'http://localhost:5000/api'; // Sesuaikan jika API Anda berjalan di port atau domain lain
+const API_URL = 'http://localhost:5000/api';
 
 // --- Fungsi untuk menghasilkan RPP dari AI ---
 export const generateRppFromAI = async (data) => {
@@ -151,8 +151,15 @@ export const downloadRppPdf = async (idRpp, rppTitle) => {
         });
 
         if (!response.ok) {
-            const errorData = await response.json(); // Coba baca pesan error dari backend
-            throw new Error(errorData.message || `Gagal mengunduh RPP PDF untuk ID ${idRpp}.`);
+            // Coba baca pesan error dari backend jika ada, jika tidak, lempar error generik.
+            // Perhatikan bahwa response.json() hanya bisa dipanggil sekali.
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Gagal mengunduh RPP PDF untuk ID ${idRpp}.`);
+            } else {
+                throw new Error(`Gagal mengunduh RPP PDF untuk ID ${idRpp}. Status: ${response.status}`);
+            }
         }
 
         const blob = await response.blob();
@@ -275,10 +282,18 @@ export const deleteSoal = async (idSoal) => {
     }
 };
 
-// Fix: Removed duplicate 'export' keyword
-export const downloadExamPdf = async (examTitle, questions, layoutSettings = {}) => { // Tambahkan layoutSettings
+export const downloadExamPdf = async (examTitle, questions, layoutSettings = {}) => {
     try {
-        const response = await fetch(`${API_URL}/generate-exam-pdf`, { // Updated endpoint name to match backend
+        // Validasi questionsData
+        if (!questions || !Array.isArray(questions) || questions.length === 0) {
+            throw new Error('Data soal tidak valid atau kosong untuk diunduh.');
+        }
+        // Pastikan layoutSettings adalah objek, jika tidak, inisialisasi sebagai objek kosong
+        if (!layoutSettings || typeof layoutSettings !== 'object') {
+            layoutSettings = {}; 
+        }
+
+        const response = await fetch(`${API_URL}/generate-exam-pdf`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -287,13 +302,21 @@ export const downloadExamPdf = async (examTitle, questions, layoutSettings = {})
             body: JSON.stringify({ 
                 exam_title: examTitle, 
                 questions: questions,
-                layout: layoutSettings // Kirim layout settings ke backend
+                layout: layoutSettings 
             }),
         });
 
+        // Periksa status respons sebelum mencoba membaca blob
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Gagal mengunduh PDF ujian.');
+            // Coba baca pesan error dari backend jika ada, jika tidak, lempar error generik.
+            // Perhatikan bahwa response.json() hanya bisa dipanggil sekali.
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Gagal mengunduh PDF ujian.');
+            } else {
+                throw new Error(`Gagal mengunduh PDF ujian. Status: ${response.status}`);
+            }
         }
 
         const blob = await response.blob();
@@ -305,7 +328,7 @@ export const downloadExamPdf = async (examTitle, questions, layoutSettings = {})
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
-        return { message: 'PDF berhasil diunduh' };
+        return { message: 'PDF berhasil diunduh' }; // Berikan pesan sukses
     } catch (error) {
         console.error("Error downloading exam PDF:", error);
         throw error;
@@ -335,7 +358,6 @@ export const getAllExams = async () => {
 export const getExamById = async (idUjian) => {
     try {
         const authHeader = getAuthHeader();
-        console.log("Authorization Header for getExamById:", authHeader); // DIAGNOSIS
         const response = await fetch(`${API_URL}/ujian/${idUjian}`, {
             headers: {
                 'Authorization': authHeader

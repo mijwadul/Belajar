@@ -120,7 +120,7 @@ def lihat_satu_rpp(id_rpp):
         'nama_kelas': rpp.kelas.nama_kelas
     })
 
-@bp.route('/rpp/<int:id_rpp>/pdf', methods=['GET']) # Menggunakan GET karena hanya mengambil resource
+@bp.route('/rpp/<int:id_rpp>/pdf', methods=['GET'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_rpp_pdf_endpoint(id_rpp):
@@ -128,14 +128,12 @@ def generate_rpp_pdf_endpoint(id_rpp):
     rpp_title = rpp.judul
     rpp_content_markdown = rpp.konten_markdown
 
-    # Menggunakan ReportLab untuk konsistensi dengan PDF ujian
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             leftMargin=inch, rightMargin=inch,
                             topMargin=inch, bottomMargin=inch)
     styles = getSampleStyleSheet()
 
-    # Define custom styles for RPP
     styles.add(ParagraphStyle(name='RppTitleStyle', parent=styles['h1'],
                               fontSize=18, leading=22, spaceAfter=18, alignment=TA_CENTER))
     styles.add(ParagraphStyle(name='RppHeading1', parent=styles['h1'],
@@ -151,7 +149,6 @@ def generate_rpp_pdf_endpoint(id_rpp):
     story.append(Paragraph(rpp_title, styles['RppTitleStyle']))
     story.append(Spacer(1, 0.2 * inch))
 
-    # Parse Markdown content (basic parsing)
     lines = rpp_content_markdown.split('\n')
     for line in lines:
         if line.strip().startswith('### '):
@@ -172,12 +169,7 @@ def generate_rpp_pdf_endpoint(id_rpp):
         current_app.logger.error("Error creating RPP PDF", exc_info=True)
         return jsonify({'message': f'Gagal membuat file PDF RPP: {e}'}), 500
 
-    # HAPUS: Tidak perlu menghapus file karena kita mengirim BytesIO langsung
-    # @after_this_request
-    # def remove_file_on_request_completion(response):
-    #     return response
-
-    buffer.seek(0) # Penting: reset buffer position to the beginning before sending
+    buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"{rpp_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
 
 
@@ -276,7 +268,7 @@ def generate_exam_pdf_endpoint():
     layout_settings = data.get('layout', {}) 
 
     if not questions_data:
-        return jsonify({'message': 'Tidak ada soal yang diberikan untuk membuat ujian.'}), 400
+        return jsonify({'message': 'Tidak ada soal yang diberikan untuk membuat ujian PDF.'}), 400
 
     # Ambil pengaturan layout dari frontend
     shuffle_questions = layout_settings.get('shuffle_questions', False)
@@ -336,17 +328,14 @@ def generate_exam_pdf_endpoint():
     try:
         doc.build(story)
     except Exception as e:
-        print(f"Error creating PDF: {e}")
-        current_app.logger.error("Error creating exam PDF", exc_info=True)
+        # Menangkap error dan log dengan detail
+        current_app.logger.error("Error creating exam PDF: %s", str(e), exc_info=True)
         return jsonify({'message': f'Gagal membuat file PDF: {e}'}), 500
 
-    # HAPUS: Tidak perlu menghapus file karena kita mengirim BytesIO langsung
-    # @after_this_request
-    # def remove_file_on_request_completion(response):
-    #     return response
-
-    buffer.seek(0) # Penting: reset buffer position to the beginning before sending
+    buffer.seek(0)
+    # Ini adalah respons akhir, pastikan tidak ada jsonify atau print setelah ini.
     return send_file(buffer, as_attachment=True, download_name=f"{exam_title.replace(' ', '_')}.pdf", mimetype='application/pdf')
+
 
 # --- NEW ENDPOINT: Save Exam ---
 @bp.route('/ujian', methods=['POST'])
