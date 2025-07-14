@@ -199,6 +199,29 @@ export const deleteSiswa = async (idSiswa) => {
     }
 };
 
+// --- NEW FUNCTION: Bulk Delete Siswa ---
+export const bulkDeleteSiswa = async (studentIds) => {
+    try {
+        const response = await fetch(`${API_URL}/siswa/bulk-delete`, {
+            method: 'DELETE', // Menggunakan metode DELETE untuk penghapusan
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify({ student_ids: studentIds }) // Mengirimkan array ID siswa
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menghapus siswa terpilih secara massal.');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error bulk deleting students:", error);
+        throw error;
+    }
+};
+
+
 // --- NEW: BULK IMPORT SISWA ---
 export const bulkImportSiswa = async (kelasId, studentsData) => {
     try {

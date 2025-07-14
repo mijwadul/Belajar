@@ -2,11 +2,12 @@
 
 from flask import Blueprint, request, jsonify
 from datetime import date
-from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa #
-from app import db #
-from flask_jwt_extended import jwt_required, get_jwt_identity #
-from app.api.auth import roles_required #
+from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa, JawabanSiswa # Import JawabanSiswa
+from app import db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.api.auth import roles_required
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 
 bp = Blueprint('classroom_api', __name__, url_prefix='/api')
 
@@ -45,18 +46,14 @@ def lihat_semua_kelas():
     
     hasil = []
     for kelas in semua_kelas:
-        # Tambahkan jumlah siswa untuk setiap kelas
-        # Ini akan membutuhkan kueri tambahan per kelas, atau join yang dioptimalkan jika memungkinkan
-        # Untuk kesederhanaan, kita bisa menghitung langsung dari relasi `kelas.siswa` jika `lazy='subquery'` atau `lazy='dynamic'`
-        # atau melakukan kueri terpisah jika tidak memuat relasi secara eager
-        jumlah_siswa_di_kelas = len(kelas.siswa) # Mengambil jumlah siswa dari relasi Many-to-Many
+        jumlah_siswa_di_kelas = len(kelas.siswa)
         data_kelas = {
             'id': kelas.id,
             'nama_kelas': kelas.nama_kelas,
             'jenjang': kelas.jenjang,
             'mata_pelajaran': kelas.mata_pelajaran,
             'tahun_ajaran': kelas.tahun_ajaran,
-            'jumlah_siswa': jumlah_siswa_di_kelas # Menambahkan data jumlah siswa per kelas
+            'jumlah_siswa': jumlah_siswa_di_kelas
         }
         hasil.append(data_kelas)
     return jsonify(hasil)
@@ -90,7 +87,7 @@ def kelola_satu_kelas(id_kelas):
             'jenjang': kelas.jenjang,
             'mata_pelajaran': kelas.mata_pelajaran,
             'tahun_ajaran': kelas.tahun_ajaran,
-            'siswa': siswa_di_kelas # Ini akan memuat semua siswa untuk detail kelas
+            'siswa': siswa_di_kelas
         }
         return jsonify(respons_kelas)
 
@@ -114,8 +111,6 @@ def kelola_satu_kelas(id_kelas):
 
     elif request.method == 'DELETE':
         try:
-            # SQLAlchemy cascade delete harusnya menghapus RPP dan Soal terkait
-            # Juga relasi di kelas_siswa dan absensi siswa di kelas ini
             db.session.delete(kelas)
             db.session.commit()
             return jsonify({'message': f'Kelas "{kelas.nama_kelas}" berhasil dihapus!'}), 200
@@ -329,6 +324,53 @@ def bulk_import_siswa(kelas_id):
         "errors": errors
     }), 200
 
+# --- NEW ENDPOINT: BULK DELETE SISWA ---
+@bp.route('/siswa/bulk-delete', methods=['DELETE'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def bulk_delete_siswa():
+    data = request.get_json()
+    student_ids = data.get('student_ids', [])
+
+    if not isinstance(student_ids, list) or not all(isinstance(sid, int) for sid in student_ids):
+        return jsonify({'message': 'Daftar ID siswa harus berupa array integer yang valid.'}), 400
+
+    success_count = 0
+    fail_count = 0
+    errors = []
+
+    for student_id in student_ids:
+        try:
+            siswa_to_delete = Siswa.query.get(student_id)
+            if siswa_to_delete:
+                # SQLAlchemy with cascade="all, delete-orphan" on relationships
+                # in Siswa model (absensi, jawaban) should handle related records.
+                # For `kelas_siswa` (many-to-many), deleting the Siswa object
+                # should automatically remove its entries from the association table.
+                
+                db.session.delete(siswa_to_delete)
+                db.session.commit() # Commit each deletion within the loop for easier error tracking
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append(f"Siswa dengan ID {student_id} tidak ditemukan.")
+        except Exception as e:
+            db.session.rollback() # Rollback if any error occurs for this specific deletion
+            fail_count += 1
+            errors.append(f"Gagal menghapus siswa dengan ID {student_id}: {str(e)}")
+            print(f"Error deleting student ID {student_id}: {e}")
+    
+    if fail_count > 0:
+        return jsonify({
+            "message": f"{success_count} siswa berhasil dihapus, {fail_count} gagal.",
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "errors": errors
+        }), 200 # Return 200 even with partial failure, as some succeeded.
+    else:
+        return jsonify({"message": f"{success_count} siswa berhasil dihapus."}), 200
+
+
 # --- FUNGSI UNTUK ABSENSI ---
 @bp.route('/kelas/<int:id_kelas>/absensi', methods=['POST'])
 @jwt_required()
@@ -422,7 +464,9 @@ def hapus_siswa(id_siswa):
     siswa = Siswa.query.get_or_404(id_siswa)
     
     Absensi.query.filter_by(siswa_id=id_siswa).delete()
-    
+    # Explicitly delete from JawabanSiswa table for this student
+    JawabanSiswa.query.filter_by(siswa_id=id_siswa).delete()
+
     db.session.delete(siswa)
     db.session.commit()
     return jsonify({'message': 'Siswa berhasil dihapus!'})

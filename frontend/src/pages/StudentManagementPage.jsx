@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
-import { getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, updateSiswa, deleteSiswa, bulkImportSiswa, getSiswaByKelas } from '../api/classroomService';
+import { 
+    getKelasDetail, tambahSiswa, daftarkanSiswaKeKelas, 
+    updateSiswa, deleteSiswa, bulkImportSiswa, getSiswaByKelas,
+    bulkDeleteSiswa 
+} from '../api/classroomService';
 import * as XLSX from 'xlsx';
 
 import {
@@ -20,6 +24,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 
 
 // Define the expected fields for student data and their display names
@@ -36,7 +41,7 @@ const FIELD_MAPPING = [
 ];
 
 function StudentManagementPage() {
-    const { id } = useParams(); // Ini adalah id kelas dari URL
+    const { id } = useParams();
     const [kelas, setKelas] = useState(null);
     const [daftarSiswa, setDaftarSiswa] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -58,18 +63,22 @@ function StudentManagementPage() {
     // State for File Upload Dialog
     const [openFileUploadDialog, setOpenFileUploadDialog] = useState(false);
     const [excelFile, setExcelFile] = useState(null);
-    const [rawExcelDataRows, setRawExcelDataRows] = useState([]); // Raw data from Excel (rows excluding header)
-    const [currentStep, setCurrentStep] = useState(1); // 1: Upload & Mapping, 2: Preview
-    const [columnMapping, setColumnMapping] = useState({}); // Mapping app field key to Excel column index
-    const [excelHeadersRaw, setExcelHeadersRaw] = useState([]); // Raw headers from Excel, including potential empty cells
-    const [processedPreviewData, setProcessedPreviewData] = useState([]); // Data processed for preview, before final selection
-    const [selectedStudentsForImport, setSelectedStudentsForImport] = useState([]); // Final student objects ready to import
+    const [rawExcelDataRows, setRawExcelDataRows] = useState([]);
+    const [currentStep, setCurrentStep] = 1;
+    const [columnMapping, setColumnMapping] = useState({});
+    const [excelHeadersRaw, setExcelHeadersRaw] = useState([]);
+    const [processedPreviewData, setProcessedPreviewData] = useState([]);
+    const [selectedStudentsForImport, setSelectedStudentsForImport] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
 
     // State for search and filter siswa
     const [searchQuery, setSearchQuery] = useState('');
     const [filterJenisKelamin, setFilterJenisKelamin] = useState('');
     const [filterAgama, setFilterAgama] = useState('');
+
+    // State for bulk delete
+    const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+    const [openBulkDeleteConfirmDialog, setOpenBulkDeleteConfirmDialog] = useState(false);
 
 
     const showSnackbar = (message, severity) => {
@@ -87,17 +96,27 @@ function StudentManagementPage() {
 
     // --- Data Fetching ---
     const muatDataSiswa = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const dataSiswa = await getSiswaByKelas(id, searchQuery, filterJenisKelamin, filterAgama);
-            setDaftarSiswa(dataSiswa);
-        } catch (error) {
-            console.error("Error fetching students:", error);
-            showSnackbar('Gagal memuat daftar siswa.', 'error');
-        } finally {
-            setIsLoading(false);
+    setIsLoading(true);
+    try {
+        let dataSiswa = await getSiswaByKelas(id, searchQuery, filterJenisKelamin, filterAgama);
+        console.log("Data siswa yang diterima dari API:", dataSiswa); // TAMBAHKAN BARIS INI
+
+        // Perbaikan: Pastikan dataSiswa adalah array yang valid
+        if (dataSiswa === null || dataSiswa === undefined || !Array.isArray(dataSiswa)) {
+            console.warn("Received non-array data (or null/undefined) for students, defaulting to empty array.", dataSiswa);
+            setDaftarSiswa([]); // Set to empty array if not an array
+        } else {
+            setDaftarSiswa(dataSiswa); // Set data jika berupa array
         }
-    }, [id, searchQuery, filterJenisKelamin, filterAgama]);
+        setSelectedStudentIds([]); // Clear selection on data reload
+    } catch (error) {
+        console.error("Error fetching students:", error);
+        showSnackbar('Gagal memuat daftar siswa.', 'error');
+        setDaftarSiswa([]); // Pastikan daftarSiswa kosong jika terjadi error
+    } finally {
+        setIsLoading(false);
+    }
+}, [id, searchQuery, filterJenisKelamin, filterAgama]);
 
     useEffect(() => {
         const fetchKelasDanSiswa = async () => {
@@ -106,10 +125,12 @@ function StudentManagementPage() {
                 const kelasDetail = await getKelasDetail(id);
                 setKelas(kelasDetail);
                 muatDataSiswa(); 
-            } catch (error) {
+            } // HAPUS SEMUA BARIS KONFLIK MARKER DI SINI
+            catch (error) {
                 console.error("Error fetching class details or students:", error);
                 showSnackbar('Gagal memuat detail kelas atau siswa.', 'error');
                 setIsLoading(false);
+                setKelas(null); // Pastikan kelas menjadi null jika ada error
             }
         };
 
@@ -136,9 +157,8 @@ function StudentManagementPage() {
 
     const handleTambahSiswa = async (e) => {
         console.log('handleTambahSiswa triggered');
-        // Pastikan event (e) diterima, karena ini bisa dipanggil dari onSubmit atau onClick
         if (e && typeof e.preventDefault === 'function') {
-            e.preventDefault(); // Mencegah refresh halaman hanya jika ini adalah event form submission
+            e.preventDefault();
         }
         
         setIsLoading(true);
@@ -157,11 +177,9 @@ function StudentManagementPage() {
                 await daftarkanSiswaKeKelas(id, responsSiswa.id_siswa);
                 console.log('Siswa berhasil didaftarkan ke kelas.');
             } else {
-                // Tangani kasus di mana tambahSiswa tidak mengembalikan id_siswa
                 throw new Error('Siswa berhasil ditambahkan, tetapi ID siswa tidak ditemukan untuk pendaftaran kelas.');
             }
             
-
             showSnackbar(`Siswa "${newStudentData.nama_lengkap}" berhasil ditambahkan dan didaftarkan!`, 'success');
             handleCloseAddDialog();
             muatDataSiswa();
@@ -205,7 +223,7 @@ function StudentManagementPage() {
         }
     };
 
-    // --- Delete Student Handler ---
+    // --- Delete Single Student Handler ---
     const handleDeleteSiswa = async (idSiswa, namaLengkap) => {
         if (window.confirm(`Apakah Anda yakin ingin menghapus siswa "${namaLengkap}"? Aksi ini tidak dapat dibatalkan.`)) {
             setIsLoading(true);
@@ -214,25 +232,66 @@ function StudentManagementPage() {
                 showSnackbar(`Siswa "${namaLengkap}" berhasil dihapus.`, 'success');
                 muatDataSiswa();
             } catch (error) {
-                console.error("Error deleting student:", error);
                 showSnackbar(error.message || 'Gagal menghapus siswa.', 'error');
+                console.error("Error deleting student:", error);
             } finally {
                 setIsLoading(false);
             }
         }
     };
 
+    // --- Bulk Delete Handlers ---
+    const handleToggleStudentSelection = (studentId) => {
+        setSelectedStudentIds(prevSelected =>
+            prevSelected.includes(studentId)
+                ? prevSelected.filter(id => id !== studentId)
+                : [...prevSelected, studentId]
+        );
+    };
+
+    const handleToggleSelectAllStudents = (event) => {
+        if (event.target.checked) {
+            const allStudentIds = daftarSiswa.map(siswa => siswa.id);
+            setSelectedStudentIds(allStudentIds);
+        } else {
+            setSelectedStudentIds([]);
+        }
+    };
+
+    const handleOpenBulkDeleteConfirmDialog = () => {
+        setOpenBulkDeleteConfirmDialog(true);
+    };
+
+    const handleCloseBulkDeleteConfirmDialog = () => {
+        setOpenBulkDeleteConfirmDialog(false);
+    };
+
+    const handleConfirmBulkDelete = async () => {
+        setIsLoading(true);
+        handleCloseBulkDeleteConfirmDialog();
+        try {
+            const response = await bulkDeleteSiswa(selectedStudentIds);
+            showSnackbar(response.message || 'Siswa terpilih berhasil dihapus.', 'success');
+            muatDataSiswa();
+        } catch (error) {
+            showSnackbar(error.message || 'Gagal menghapus siswa terpilih.', 'error');
+            console.error("Error bulk deleting students:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // --- File Upload Handlers ---
     const handleOpenUploadDialog = () => {
         setOpenFileUploadDialog(true);
-        setCurrentStep(1); // Always start at step 1: Upload & Mapping
+        setCurrentStep(1);
         setExcelFile(null);
         setRawExcelDataRows([]);
         setExcelHeadersRaw([]);
         setColumnMapping({});
         setProcessedPreviewData([]);
         setSelectedStudentsForImport([]);
-        setIsUploading(false); // Ensure this is false when opening
+        setIsUploading(false);
     };
 
     const handleCloseUploadDialog = () => {
@@ -463,6 +522,20 @@ function StudentManagementPage() {
                         Import Siswa (Excel)
                     </Button>
                 </Grid>
+                {selectedStudentIds.length > 0 && (
+                    <Grid item xs={12}>
+                        <Button
+                            variant="contained"
+                            color="error"
+                            startIcon={<DeleteForeverIcon />}
+                            onClick={handleOpenBulkDeleteConfirmDialog}
+                            fullWidth
+                            disabled={isLoading}
+                        >
+                            Hapus {selectedStudentIds.length} Siswa Terpilih
+                        </Button>
+                    </Grid>
+                )}
             </Grid>
 
             {/* Bagian Daftar Siswa */}
@@ -514,11 +587,7 @@ function StudentManagementPage() {
                         <Grid item xs={6}>
                             <FormControl fullWidth variant="outlined">
                                 <InputLabel>Agama</InputLabel>
-                                <Select
-                                    value={filterAgama}
-                                    onChange={(e) => setFilterAgama(e.target.value)}
-                                    label="Agama"
-                                >
+                                <Select name="agama" value={filterAgama} label="Agama" onChange={(e) => setFilterAgama(e.target.value)}>
                                     <MenuItem value="">Semua</MenuItem>
                                     {agamaOptions.map((agama) => (
                                         <MenuItem key={agama} value={agama}>{agama}</MenuItem>
@@ -557,6 +626,14 @@ function StudentManagementPage() {
                         <Table size="small">
                             <TableHead>
                                 <TableRow>
+                                    {/* Checkbox untuk Select All */}
+                                    <TableCell padding="checkbox">
+                                        <Checkbox
+                                            onChange={handleToggleSelectAllStudents}
+                                            checked={selectedStudentIds.length === daftarSiswa.length && daftarSiswa.length > 0}
+                                            indeterminate={selectedStudentIds.length > 0 && selectedStudentIds.length < daftarSiswa.length}
+                                        />
+                                    </TableCell>
                                     <TableCell>No.</TableCell>
                                     <TableCell>Nama Lengkap</TableCell>
                                     <TableCell>NISN</TableCell>
@@ -567,24 +644,34 @@ function StudentManagementPage() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {daftarSiswa.map((siswa, index) => (
-                                    <TableRow key={siswa.id}>
-                                        <TableCell>{index + 1}</TableCell>
-                                        <TableCell>{siswa.nama_lengkap}</TableCell>
-                                        <TableCell>{siswa.nisn || 'N/A'}</TableCell>
-                                        <TableCell>{siswa.jenis_kelamin}</TableCell>
-                                        <TableCell>{siswa.tanggal_lahir}</TableCell>
-                                        <TableCell>{siswa.agama}</TableCell>
-                                        <TableCell align="right">
-                                            <IconButton size="small" onClick={() => handleOpenEditDialog(siswa)}>
-                                                <EditIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton size="small" color="error" onClick={() => handleDeleteSiswa(siswa.id, siswa.nama_lengkap)}>
-                                                <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {daftarSiswa.map((siswa, index) => {
+                                    const isItemSelected = selectedStudentIds.includes(siswa.id);
+                                    return (
+                                        <TableRow key={siswa.id} selected={isItemSelected}>
+                                            {/* Checkbox untuk setiap siswa */}
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    checked={isItemSelected}
+                                                    onChange={() => handleToggleStudentSelection(siswa.id)}
+                                                />
+                                            </TableCell>
+                                            <TableCell>{index + 1}</TableCell>
+                                            <TableCell>{siswa.nama_lengkap}</TableCell>
+                                            <TableCell>{siswa.nisn || 'N/A'}</TableCell>
+                                            <TableCell>{siswa.jenis_kelamin}</TableCell>
+                                            <TableCell>{siswa.tanggal_lahir}</TableCell>
+                                            <TableCell>{siswa.agama}</TableCell>
+                                            <TableCell align="right">
+                                                <IconButton size="small" onClick={() => handleOpenEditDialog(siswa)}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                                <IconButton size="small" color="error" onClick={() => handleDeleteSiswa(siswa.id, siswa.nama_lengkap)}>
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </TableContainer>
@@ -595,7 +682,6 @@ function StudentManagementPage() {
             <Dialog open={openAddDialog} onClose={handleCloseAddDialog} maxWidth="sm" fullWidth>
                 <DialogTitle>Tambah Siswa Baru (Manual)</DialogTitle>
                 <DialogContent dividers>
-                    {/* BERIKAN ID PADA BOX YANG BERFUNGSI SEBAGAI FORM */}
                     <Box component="form" id="add-student-form" onSubmit={handleTambahSiswa} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
                         <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={newStudentData.nama_lengkap} onChange={handleNewStudentChange} required />
                         <TextField fullWidth label="NISN" name="nisn" value={newStudentData.nisn} onChange={handleNewStudentChange} required />
@@ -627,12 +713,10 @@ function StudentManagementPage() {
                 <DialogActions>
                     <Button onClick={handleCloseAddDialog} color="secondary">Batal</Button>
                     <Button
-                        type="submit" // Penting untuk memicu onSubmit form
-                        form="add-student-form" // Menghubungkan button ini ke form dengan ID "add-student-form"
+                        type="submit"
+                        form="add-student-form"
                         variant="contained"
                         disabled={isLoading}
-                        // Fallback onClick: panggil handleTambahSiswa langsung, tapi pastikan tidak memicu dua kali
-                        // Hapus console.log di sini jika sudah berfungsi normal dan tidak lagi dibutuhkan untuk debugging
                         onClick={ (e) => { console.log('Button onClick triggered (fallback)'); if (!isLoading) handleTambahSiswa(e); } } 
                     >
                         {isLoading ? <CircularProgress size={24} /> : 'Tambahkan Siswa'}
@@ -647,21 +731,21 @@ function StudentManagementPage() {
                 <DialogContent dividers>
                     {editStudentData && (
                         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                            <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={editStudentData.nama_lengkap || ''} onChange={handleEditStudentChange} required />
-                            <TextField fullWidth label="NISN" name="nisn" value={editStudentData.nisn || ''} onChange={handleEditStudentChange} />
-                            <TextField fullWidth label="NIS" name="nis" value={editStudentData.nis || ''} onChange={handleEditStudentChange} />
-                            <TextField fullWidth label="Tempat Lahir" name="tempat_lahir" value={editStudentData.tempat_lahir || ''} onChange={handleEditStudentChange} />
-                            <TextField fullWidth label="Tanggal Lahir (YYYY-MM-DD)" type="date" name="tanggal_lahir" value={editStudentData.tanggal_lahir || ''} onChange={handleEditStudentChange} InputLabelProps={{ shrink: true }} />
+                            <TextField fullWidth label="Nama Lengkap" name="nama_lengkap" value={editStudentData ? editStudentData.nama_lengkap : ''} onChange={handleEditStudentChange} required />
+                            <TextField fullWidth label="NISN" name="nisn" value={editStudentData ? editStudentData.nisn : ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="NIS" name="nis" value={editStudentData ? editStudentData.nis : ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Tempat Lahir" name="tempat_lahir" value={editStudentData ? editStudentData.tempat_lahir : ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Tanggal Lahir (YYYY-MM-DD)" type="date" name="tanggal_lahir" value={editStudentData ? editStudentData.tanggal_lahir : ''} onChange={handleEditStudentChange} InputLabelProps={{ shrink: true }} />
                             <FormControl fullWidth>
                                 <InputLabel>Jenis Kelamin</InputLabel>
-                                <Select name="jenis_kelamin" value={editStudentData.jenis_kelamin || 'Laki-laki'} label="Jenis Kelamin" onChange={handleEditStudentChange}>
+                                <Select name="jenis_kelamin" value={editStudentData ? (editStudentData.jenis_kelamin || 'Laki-laki') : 'Laki-laki'} label="Jenis Kelamin" onChange={handleEditStudentChange}>
                                     <MenuItem value="Laki-laki">Laki-laki</MenuItem>
                                     <MenuItem value="Perempuan">Perempuan</MenuItem>
                                 </Select>
                             </FormControl>
                             <FormControl fullWidth>
                                 <InputLabel>Agama</InputLabel>
-                                <Select name="agama" value={editStudentData.agama || 'Islam'} label="Agama" onChange={handleEditStudentChange}>
+                                <Select name="agama" value={editStudentData ? (editStudentData.agama || 'Islam') : 'Islam'} label="Agama" onChange={handleEditStudentChange}>
                                     <MenuItem value="Islam">Islam</MenuItem>
                                     <MenuItem value="Kristen Protestan">Kristen Protestan</MenuItem>
                                     <MenuItem value="Kristen Katolik">Kristen Katolik</MenuItem>
@@ -670,8 +754,8 @@ function StudentManagementPage() {
                                     <MenuItem value="Konghucu">Konghucu</MenuItem>
                                 </Select>
                             </FormControl>
-                            <TextField fullWidth label="Alamat Lengkap" name="alamat" multiline rows={3} value={editStudentData.alamat || ''} onChange={handleEditStudentChange} />
-                            <TextField fullWidth label="Nomor HP Siswa" name="nomor_hp" value={editStudentData.nomor_hp || ''} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Alamat Lengkap" name="alamat" value={editStudentData ? editStudentData.alamat : ''} multiline rows={3} onChange={handleEditStudentChange} />
+                            <TextField fullWidth label="Nomor HP Siswa" name="nomor_hp" value={editStudentData ? editStudentData.nomor_hp : ''} onChange={handleEditStudentChange} />
                         </Box>
                     )}
                 </DialogContent>
@@ -806,8 +890,8 @@ function StudentManagementPage() {
                                                 <TableRow key={index}>
                                                     <TableCell padding="checkbox">
                                                         <Checkbox
-                                                            onChange={() => handleToggleSelect(student)}
                                                             checked={isStudentSelected}
+                                                            onChange={() => handleToggleSelect(student)}
                                                         />
                                                     </TableCell>
                                                     {FIELD_MAPPING.map((field) => (
@@ -847,6 +931,27 @@ function StudentManagementPage() {
                             </Button>
                         </>
                     )}
+                </DialogActions>
+            </Dialog>
+
+            {/* Dialog Konfirmasi Hapus Massal */}
+            <Dialog
+                open={openBulkDeleteConfirmDialog}
+                onClose={handleCloseBulkDeleteConfirmDialog}
+                aria-labelledby="bulk-delete-dialog-title"
+                aria-describedby="bulk-delete-dialog-description"
+            >
+                <DialogTitle id="bulk-delete-dialog-title">Konfirmasi Hapus Siswa</DialogTitle>
+                <DialogContent>
+                    <Typography id="bulk-delete-dialog-description">
+                        Anda akan menghapus {selectedStudentIds.length} siswa terpilih secara permanen. Aksi ini tidak dapat dibatalkan. Apakah Anda yakin?
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseBulkDeleteConfirmDialog} color="secondary">Batal</Button>
+                    <Button onClick={handleConfirmBulkDelete} color="error" variant="contained" autoFocus disabled={isLoading}>
+                        {isLoading ? <CircularProgress size={24} /> : 'Hapus Sekarang'}
+                    </Button>
                 </DialogActions>
             </Dialog>
 

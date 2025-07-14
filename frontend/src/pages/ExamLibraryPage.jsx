@@ -8,14 +8,14 @@ import {
     Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     Button, CircularProgress, Snackbar, Alert,
     Dialog, DialogTitle, DialogContent, DialogActions,
-    List, ListItem, ListItemText, Divider, IconButton
+    List, ListItem, ListItemText, Divider, IconButton, useTheme
 } from '@mui/material';
-import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // Icon untuk halaman
-import DownloadIcon from '@mui/icons-material/Download'; // Icon untuk download
-import DeleteIcon from '@mui/icons-material/Delete'; // Icon untuk delete
-import VisibilityIcon from '@mui/icons-material/Visibility'; // Icon untuk lihat detail
-import ClearIcon from '@mui/icons-material/Clear'; // Icon untuk tutup dialog
-import ShuffleIcon from '@mui/icons-material/Shuffle'; // NEW: Icon untuk Shuffle
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import DownloadIcon from '@mui/icons-material/Download';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import ClearIcon from '@mui/icons-material/Clear';
+import ShuffleIcon from '@mui/icons-material/Shuffle';
 
 const ExamLibraryPage = () => {
     const [exams, setExams] = useState([]);
@@ -28,9 +28,10 @@ const ExamLibraryPage = () => {
     const [openDetailDialog, setOpenDetailDialog] = useState(false);
     const [selectedExamDetail, setSelectedExamDetail] = useState(null);
     const [loadingExamDetail, setLoadingExamDetail] = useState(false);
-    const [isGeneratingVersion, setIsGeneratingVersion] = useState(false); // NEW: State untuk loading versi baru
+    const [isGeneratingVersion, setIsGeneratingVersion] = useState(false);
 
     const navigate = useNavigate();
+    const theme = useTheme();
 
     const showSnackbar = (message, severity) => {
         setSnackbarMessage(message);
@@ -50,9 +51,18 @@ const ExamLibraryPage = () => {
         try {
             const data = await getAllExams();
             setExams(data);
+            setError(null);
         } catch (err) {
-            setError(err.message);
-            showSnackbar(`Gagal memuat daftar ujian: ${err.message}`, 'error');
+            let displayMessage = err.message || "Terjadi kesalahan yang tidak diketahui.";
+            setError(displayMessage);
+            
+            if (err.message && (err.message.includes("Akses tidak diizinkan") || err.message.includes("Unauthorized") || err.message.includes("Forbidden"))) {
+                 displayMessage = "Sesi Anda mungkin telah berakhir atau Anda tidak memiliki izin. Silakan login kembali.";
+            } else if (err.message && err.message.includes("NetworkError")) {
+                displayMessage = "Tidak dapat terhubung ke server. Periksa koneksi internet Anda atau coba lagi nanti.";
+            }
+
+            showSnackbar(`Gagal memuat daftar ujian: ${displayMessage}`, 'error');
             console.error("Failed to fetch exams:", err);
         } finally {
             setLoading(false);
@@ -70,7 +80,7 @@ const ExamLibraryPage = () => {
                 setExams(exams.filter(exam => exam.id !== id));
                 showSnackbar('Ujian berhasil dihapus!', 'success');
             } catch (err) {
-                showSnackbar(`Gagal menghapus ujian: ${err.message}`, 'error');
+                showSnackbar(`Gagal menghapus ujian: ${err.message || 'Terjadi kesalahan.'}`, 'error');
                 console.error("Failed to delete exam:", err);
             }
         }
@@ -78,11 +88,10 @@ const ExamLibraryPage = () => {
 
     const handleDownloadExam = async (examTitle, questionsData, layoutSettings) => {
         try {
-            // Validasi questionsData dipindahkan ke aiService.js
             await downloadExamPdf(examTitle, questionsData, layoutSettings);
             showSnackbar('Ujian PDF berhasil diunduh!', 'success');
         } catch (err) {
-            showSnackbar(`${err.message}`, 'error'); // Tampilkan pesan error dari aiService.js
+            showSnackbar(`${err.message || 'Gagal mengunduh PDF ujian.'}`, 'error');
             console.error("Failed to download exam PDF:", err);
         }
     };
@@ -94,7 +103,7 @@ const ExamLibraryPage = () => {
             setSelectedExamDetail(detail);
             setOpenDetailDialog(true);
         } catch (err) {
-            showSnackbar(`Gagal memuat detail ujian: ${err.message}`, 'error');
+            showSnackbar(`Gagal memuat detail ujian: ${err.message || 'Terjadi kesalahan.'}`, 'error');
             console.error("Failed to fetch exam details:", err);
         } finally {
             setLoadingExamDetail(false);
@@ -106,7 +115,6 @@ const ExamLibraryPage = () => {
         setSelectedExamDetail(null);
     };
 
-    // Helper function to shuffle an array (client-side for display/versioning)
     const shuffleArray = (array) => {
         const newArray = [...array];
         for (let i = newArray.length - 1; i > 0; i--) {
@@ -116,46 +124,32 @@ const ExamLibraryPage = () => {
         return newArray;
     };
 
-    // NEW: Fungsi untuk membuat versi baru (acak) dari ujian
     const handleCreateNewVersion = async (examId, originalTitle) => {
         setIsGeneratingVersion(true);
         try {
-            // 1. Ambil detail ujian lengkap dari backend
             const originalExam = await getExamById(examId);
-            const questions = originalExam.konten_json; // Daftar soal asli
-            const originalLayout = originalExam.layout || {}; // Layout asli
+            const questions = originalExam.konten_json;
+            const originalLayout = originalExam.layout || {};
 
-            // Validasi questionsData dari originalExam - dipindahkan ke aiService.js
-            // if (!questions || !Array.isArray(questions) || questions.length === 0) {
-            //     showSnackbar('Data soal ujian tidak valid untuk membuat versi baru.', 'warning');
-            //     setIsGeneratingVersion(false);
-            //     return;
-            // }
-
-            // 2. Buat judul baru untuk versi acak
             const timestamp = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const newExamTitle = `${originalTitle} (Versi Acak - ${timestamp})`;
 
-            // 3. Tentukan pengaturan layout untuk versi baru (selalu acak)
             const newLayoutSettings = {
-                ...originalLayout, // Salin pengaturan layout asli
-                shuffle_questions: true, // Pastikan soal diacak
-                shuffle_answers: true,   // Pastikan pilihan jawaban diacak
-                // student_info_fields juga disalin dari originalLayout atau diatur ulang jika perlu
+                ...originalLayout,
+                shuffle_questions: true,
+                shuffle_answers: true,
             };
 
-            // 4. Unduh PDF ujian dengan pengaturan acak
             await downloadExamPdf(newExamTitle, questions, newLayoutSettings);
-            showSnackbar(`Versi baru ujian "${newExamTitle}" berhasil dibuat dan diunduh!`, 'success'); // Update snackbar message
+            showSnackbar(`Versi baru ujian "${newExamTitle}" berhasil dibuat dan diunduh!`, 'success');
 
         } catch (err) {
-            showSnackbar(`${err.message}`, 'error'); // Tampilkan pesan error dari aiService.js
+            showSnackbar(`${err.message || 'Gagal membuat versi baru ujian.'}`, 'error');
             console.error("Failed to create new exam version:", err);
         } finally {
             setIsGeneratingVersion(false);
         }
     };
-
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -174,24 +168,27 @@ const ExamLibraryPage = () => {
             ) : exams.length === 0 ? (
                 <Paper elevation={2} sx={{ p: 3, borderRadius: '12px', textAlign: 'center' }}>
                     <Typography variant="h6" color="text.secondary">
-                        Belum ada ujian yang tersimpan.
+                        {error ? `Terjadi kesalahan: ${error}` : 'Belum ada ujian yang tersimpan.'}
                     </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                        Mulai buat ujian baru dari{' '}
-                        <Link to="/exam-generator" style={{ textDecoration: 'none' }}>
-                            <Button variant="text" color="primary">
-                                Halaman Pembuat Ujian
-                            </Button>
-                        </Link>
-                        .
-                    </Typography>
+                    {!error && (
+                        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                            Mulai buat ujian baru dari{' '}
+                            <Link to="/exam-generator" style={{ textDecoration: 'none' }}>
+                                <Button variant="text" color="primary">
+                                    Halaman Pembuat Ujian
+                                </Button>
+                            </Link>
+                            .
+                        </Typography>
+                    )}
                 </Paper>
             ) : (
                 <TableContainer component={Paper} elevation={3} sx={{ borderRadius: '12px', overflow: 'hidden' }}>
                     <Table stickyHeader aria-label="bank ujian table">
                         <TableHead>
-                            <TableRow sx={{ bgcolor: '#1976d2' }}> {/* Mengubah primary.main menjadi warna biru solid */}
-                                <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Judul Ujian</TableCell> {/* Mengubah primary.contrastText menjadi hitam */}
+                            <TableRow sx={{ bgcolor: theme.palette.primary.main }}>
+                                {/* MENGUBAH WARNA TEKS HEADER MENJADI HITAM (#000000) */}
+                                <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Judul Ujian</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Jumlah Soal</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', color: '#000000' }}>Tanggal Dibuat</TableCell>
                                 <TableCell align="center" sx={{ fontWeight: 'bold', color: '#000000' }}>Aksi</TableCell>
@@ -201,7 +198,6 @@ const ExamLibraryPage = () => {
                             {exams.map((exam) => (
                                 <TableRow key={exam.id} hover>
                                     <TableCell>
-                                        {/* Menggunakan Typography dan Link agar terlihat seperti RPP Library */}
                                         <Button
                                             variant="text"
                                             onClick={() => handleViewExamDetails(exam.id)}
@@ -230,7 +226,6 @@ const ExamLibraryPage = () => {
                                         >
                                             <VisibilityIcon />
                                         </IconButton>
-                                        {/* Tombol Buat Versi Baru sebagai IconButton */}
                                         <IconButton
                                             aria-label="create new version"
                                             onClick={() => handleCreateNewVersion(exam.id, exam.judul)}
@@ -261,7 +256,6 @@ const ExamLibraryPage = () => {
                 </TableContainer>
             )}
 
-            {/* Dialog untuk menampilkan detail ujian */}
             <Dialog open={openDetailDialog} onClose={handleCloseDetailDialog} maxWidth="md" fullWidth>
                 <DialogTitle>
                     Detail Ujian: {selectedExamDetail?.judul}
