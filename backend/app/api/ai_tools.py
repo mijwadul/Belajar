@@ -108,6 +108,7 @@ def lihat_semua_rpp():
         })
     return jsonify(hasil)
 
+# MODIFIKASI: Pisahkan GET dan DELETE untuk RPP
 @bp.route('/rpp/<int:id_rpp>', methods=['GET'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
@@ -119,6 +120,22 @@ def lihat_satu_rpp(id_rpp):
         'konten_markdown': rpp.konten_markdown,
         'nama_kelas': rpp.kelas.nama_kelas
     })
+
+# NEW: Endpoint DELETE khusus untuk RPP
+@bp.route('/rpp/<int:id_rpp>', methods=['DELETE'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def delete_rpp(id_rpp):
+    try:
+        rpp = RPP.query.get_or_404(id_rpp)
+        db.session.delete(rpp)
+        db.session.commit()
+        return jsonify({'message': f'RPP "{rpp.judul}" berhasil dihapus!'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting RPP: {e}")
+        return jsonify({'message': 'Gagal menghapus RPP.', 'details': str(e)}), 500
+
 
 @bp.route('/rpp/<int:id_rpp>/pdf', methods=['GET'])
 @jwt_required()
@@ -275,9 +292,23 @@ def generate_exam_pdf_endpoint():
     shuffle_answers = layout_settings.get('shuffle_answers', False)
     student_info_fields = layout_settings.get('student_info_fields', []) 
 
-    # Terapkan pengacakan soal jika diaktifkan
+    # Pisahkan soal pilihan ganda dan esai
+    mcq_questions = []
+    essay_questions = []
+
+    for q in questions_data:
+        if q.get('pilihan') and isinstance(q['pilihan'], dict) and q['pilihan']:
+            mcq_questions.append(q)
+        elif q.get('jawaban_ideal') and (not q.get('pilihan') or (isinstance(q.get('pilihan'), dict) and not q['pilihan'])):
+            essay_questions.append(q)
+        else:
+            current_app.logger.warning(f"Soal dengan tipe ambigu atau tidak teridentifikasi dilewati: {q}")
+
+
+    # Terapkan pengacakan di dalam setiap jenis soal jika diaktifkan
     if shuffle_questions:
-        random.shuffle(questions_data)
+        random.shuffle(mcq_questions)
+        random.shuffle(essay_questions)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
@@ -299,31 +330,49 @@ def generate_exam_pdf_endpoint():
 
     story = []
 
-    # Tambahkan judul ujian
-    story.append(Paragraph(exam_title, styles['TitleStyle']))
-    story.append(Spacer(1, 0.2 * inch))
+    # HAPUS JUDUL UJIAN DARI PDF
+    # story.append(Paragraph(exam_title, styles['TitleStyle']))
+    # story.append(Spacer(1, 0.2 * inch))
 
     # Tambahkan kolom informasi siswa jika diaktifkan
     for field_label in student_info_fields:
         story.append(Paragraph(f"{field_label}: ___________________________________________", styles['InfoFieldStyle']))
     story.append(Spacer(1, 0.3 * inch)) 
 
-    for i, q_data in enumerate(questions_data):
-        question_text = f"{i+1}. {q_data.get('pertanyaan', '')}"
-        story.append(Paragraph(question_text, styles['QuestionStyle']))
-        
-        if q_data.get('pilihan'):
-            option_items = list(q_data['pilihan'].items())
-            if shuffle_answers:
-                random.shuffle(option_items) 
+    # Bagian I: Soal Pilihan Ganda
+    if mcq_questions:
+        story.append(Paragraph("Bagian I: Pilihan Ganda", styles['SectionTitleStyle']))
+        for i, q_data in enumerate(mcq_questions):
+            question_text = f"{i+1}. {q_data.get('pertanyaan', '')}"
+            story.append(Paragraph(question_text, styles['QuestionStyle']))
             
-            for key, value in option_items:
-                story.append(Paragraph(f"   {key}. {value}", styles['OptionStyle']))
-        elif q_data.get('jawaban_ideal'):
+            if q_data.get('pilihan') and isinstance(q_data['pilihan'], dict):
+                option_values = list(q_data['pilihan'].values()) # Ambil hanya nilai opsi
+                if shuffle_answers:
+                    random.shuffle(option_values) # Acak hanya nilai opsi
+                
+                # Gunakan label A, B, C, D... tetap berurutan untuk menampilkan opsi
+                option_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] 
+                for j, value in enumerate(option_values):
+                    if j < len(option_labels):
+                        story.append(Paragraph(f"   {option_labels[j]}. {value}", styles['OptionStyle']))
+                    else:
+                        # Fallback jika ada lebih banyak opsi daripada label default
+                        story.append(Paragraph(f"   {chr(65 + j)}. {value}", styles['OptionStyle'])) 
+            story.append(Spacer(1, 0.1 * inch))
+
+    # Bagian II: Soal Esai
+    if essay_questions:
+        if mcq_questions: # Tambahkan halaman baru jika ada soal pilihan ganda sebelumnya
+            story.append(PageBreak())
+        story.append(Paragraph("Bagian II: Esai", styles['SectionTitleStyle']))
+        for i, q_data in enumerate(essay_questions):
+            question_text = f"{i+1}. {q_data.get('pertanyaan', '')}"
+            story.append(Paragraph(question_text, styles['QuestionStyle']))
             story.append(Paragraph("   Jawaban: ____________________________________________________________________", styles['OptionStyle']))
             story.append(Spacer(1, 0.5 * inch)) 
-        
-        story.append(Spacer(1, 0.1 * inch)) 
+        story.append(Spacer(1, 0.1 * inch))
+
 
     try:
         doc.build(story)

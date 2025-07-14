@@ -64,7 +64,10 @@ function StudentManagementPage() {
     const [openFileUploadDialog, setOpenFileUploadDialog] = useState(false);
     const [excelFile, setExcelFile] = useState(null);
     const [rawExcelDataRows, setRawExcelDataRows] = useState([]);
-    const [currentStep, setCurrentStep] = 1;
+    // GANTI BARIS INI:
+    const [currentStep, setCurrentStep] = useState(1); // Perbaikan: Gunakan useState untuk inisialisasi
+    // DENGAN BARIS INI:
+    // const [currentStep, setCurrentStep] = useState(1);
     const [columnMapping, setColumnMapping] = useState({});
     const [excelHeadersRaw, setExcelHeadersRaw] = useState([]);
     const [processedPreviewData, setProcessedPreviewData] = useState([]);
@@ -125,7 +128,7 @@ function StudentManagementPage() {
                 const kelasDetail = await getKelasDetail(id);
                 setKelas(kelasDetail);
                 muatDataSiswa(); 
-            } // HAPUS SEMUA BARIS KONFLIK MARKER DI SINI
+            }
             catch (error) {
                 console.error("Error fetching class details or students:", error);
                 showSnackbar('Gagal memuat detail kelas atau siswa.', 'error');
@@ -615,7 +618,7 @@ function StudentManagementPage() {
                         <CircularProgress />
                     </Box>
                 ) : daftarSiswa.length === 0 ? (
-                    <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 3 }}>
+                    <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 3, py: 4 }}>
                         { (searchQuery || filterJenisKelamin || filterAgama) ?
                             "Tidak ada siswa yang cocok dengan kriteria pencarian/filter Anda." :
                             `Belum ada siswa di kelas ${kelas?.nama_kelas}. Silakan tambahkan.`
