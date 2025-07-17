@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { generateRppFromAI, simpanRpp } from '../api/aiService';
@@ -16,6 +15,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { getAuthHeader } from '../api/authService';
 
 function RppGeneratorPage() {
     const navigate = useNavigate();
@@ -194,12 +194,15 @@ function RppGeneratorPage() {
             fileReferensList.forEach((file) => {
                 formData.append('file', file);
             });
-            const token = localStorage.getItem('token');
+            
             const response = await fetch('http://localhost:5000/api/analyze-referensi', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: { 
+                    'Authorization': getAuthHeader() // Memanggil fungsi untuk mendapatkan header
+                },
                 body: formData
             });
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Gagal menganalisis referensi.');
@@ -288,7 +291,6 @@ function RppGeneratorPage() {
                             />
                             {/* Indikator Pembelajaran dan Tujuan Pembelajaran DIHAPUS, akan digenerate AI */}
                             
-
                             <Box sx={{ mt: 2 }}>
                                 <Typography variant="subtitle1" gutterBottom>
                                     Unggah File Referensi (PDF/DOCX/TXT/JPG/PNG - Opsional)
@@ -330,54 +332,39 @@ function RppGeneratorPage() {
                                 >
                                     {isAnalyzing ? 'Memproses Referensi...' : 'Proses Referensi'}
                                 </Button>
-            {/* Popup hasil analisis referensi */}
-            <Dialog open={analysisOpen} onClose={() => setAnalysisOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Hasil Analisis Referensi</DialogTitle>
-                <DialogContent dividers>
-                    {analysisResult ? (
-                        <Box>
-                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(analysisResult, null, 2)}</pre>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                sx={{ mt: 2 }}
-                                onClick={() => {
-                                    // Gunakan hasil ekstraksi untuk mengisi form RPP
-                                    if (analysisResult) {
-                                        setTopik(analysisResult.materi_pokok || '');
-                                        setAlokasiWaktu('2 x 45 menit');
-                                        setUseExtracted(true);
-                                        setAnalysisOpen(false);
-                                        showSnackbar('Data referensi berhasil diambil untuk pembuatan RPP.', 'success');
-                                    }
-                                }}
-                            >
-                                Gunakan Data Referensi untuk RPP
-                            </Button>
-                        </Box>
-                    ) : (
-                        <Typography>Memproses referensi...</Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAnalysisOpen(false)} color="primary">Tutup</Button>
-                </DialogActions>
-            </Dialog>
-                               
-            {/* Popup hasil analisis referensi */}
-            <Dialog open={analysisOpen} onClose={() => setAnalysisOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Hasil Analisis Referensi</DialogTitle>
-                <DialogContent dividers>
-                    {analysisResult ? (
-                        <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(analysisResult, null, 2)}</pre>
-                    ) : (
-                        <Typography>Memproses referensi...</Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAnalysisOpen(false)} color="primary">Tutup</Button>
-                </DialogActions>
-            </Dialog>
+                                {/* Popup hasil analisis referensi */}
+                                <Dialog open={analysisOpen} onClose={() => setAnalysisOpen(false)} maxWidth="md" fullWidth>
+                                    <DialogTitle>Hasil Analisis Referensi</DialogTitle>
+                                    <DialogContent dividers>
+                                        {analysisResult ? (
+                                            <Box>
+                                                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(analysisResult, null, 2)}</pre>
+                                                <Button
+                                                    variant="contained"
+                                                    color="primary"
+                                                    sx={{ mt: 2 }}
+                                                    onClick={() => {
+                                                        // Gunakan hasil ekstraksi untuk mengisi form RPP
+                                                        if (analysisResult) {
+                                                            setTopik(analysisResult.materi_pokok || '');
+                                                            setAlokasiWaktu('2 x 45 menit');
+                                                            setUseExtracted(true);
+                                                            setAnalysisOpen(false);
+                                                            showSnackbar('Data referensi berhasil diambil untuk pembuatan RPP.', 'success');
+                                                        }
+                                                    }}
+                                                >
+                                                    Gunakan Data Referensi untuk RPP
+                                                </Button>
+                                            </Box>
+                                        ) : (
+                                            <Typography>Memproses referensi...</Typography>
+                                        )}
+                                    </DialogContent>
+                                    <DialogActions>
+                                        <Button onClick={() => setAnalysisOpen(false)} color="primary">Tutup</Button>
+                                    </DialogActions>
+                                </Dialog>
                             </Box>
                             
                             <Button

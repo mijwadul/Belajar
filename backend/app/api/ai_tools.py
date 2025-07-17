@@ -37,35 +37,42 @@ ai_service_instance = AIService(current_app.config.get('GEMINI_MODEL', 'gemini-1
 @roles_required(['Admin', 'Guru', 'Super User'])
 def analyze_referensi_endpoint():
     """
-    Endpoint untuk menerima file referensi (PDF, Gambar, Teks), mengekstrak isinya,
+    Endpoint untuk menerima BEBERAPA file referensi, mengekstrak isinya,
     dan meminta AI untuk menganalisis teks tersebut menjadi komponen RPP.
     """
     if 'file' not in request.files:
-        return jsonify({'message': 'Request harus menyertakan file.'}), 400
+        return jsonify({'message': 'Request harus menyertakan setidaknya satu file.'}), 400
 
-    file_storage = request.files['file']
+    uploaded_files = request.files.getlist('file') # <-- PERBAIKAN: Gunakan getlist
 
-    if file_storage.filename == '':
-        return jsonify({'message': 'Nama file tidak boleh kosong.'}), 400
+    if not uploaded_files or uploaded_files[0].filename == '':
+        return jsonify({'message': 'Tidak ada file yang dipilih.'}), 400
 
     # Menggunakan direktori sementara yang aman untuk menyimpan file
     temp_dir = tempfile.mkdtemp()
-    file_path = os.path.join(temp_dir, file_storage.filename)
+    
+    combined_text = ""
+    bibliography = []
 
     try:
-        file_storage.save(file_path)
+        for file_storage in uploaded_files:
+            if file_storage and file_storage.filename:
+                file_path = os.path.join(temp_dir, file_storage.filename)
+                file_storage.save(file_path)
+                
+                # 1. Ekstrak teks dari setiap file dan gabungkan
+                extracted_text = ai_service_instance.extract_text_from_file(file_path)
+                combined_text += extracted_text + "\n\n" # Gabungkan teks dengan pemisah
+                bibliography.append(file_storage.filename) # Tambahkan nama file ke bibliografi
 
-        # 1. Ekstrak teks dari file menggunakan service
-        extracted_text = ai_service_instance.extract_text_from_file(file_path)
-        
-        if not extracted_text or not extracted_text.strip():
-            return jsonify({'message': 'Gagal mengekstrak teks dari file atau file kosong.'}), 400
+        if not combined_text.strip():
+            return jsonify({'message': 'Gagal mengekstrak teks dari file atau semua file kosong.'}), 400
 
-        # 2. Analisis teks yang sudah diekstrak menggunakan service
-        analysis_result = ai_service_instance.analyze_reference_text(extracted_text)
+        # 2. Analisis gabungan teks yang sudah diekstrak
+        analysis_result = ai_service_instance.analyze_reference_text(combined_text)
         
-        # 3. Tambahkan nama file ke bibliografi
-        analysis_result['bibliografi'] = [file_storage.filename]
+        # 3. Tambahkan semua nama file ke bibliografi
+        analysis_result['bibliografi'] = bibliography
 
         return jsonify(analysis_result)
 
@@ -76,7 +83,6 @@ def analyze_referensi_endpoint():
     finally:
         # Selalu pastikan direktori sementara dihapus setelah selesai
         shutil.rmtree(temp_dir, ignore_errors=True)
-
 
 # --- RUTE UNTUK GENERATE RPP ---
 @bp.route('/generate-rpp', methods=['POST'])
@@ -106,7 +112,7 @@ def generate_rpp_endpoint():
             jenjang=data['jenjang'],
             topik=data['topik'],
             alokasi_waktu=data['alokasi_waktu'],
-            file_path=file_path  # Kirim path file jika ada
+            file_paths=file_path  # Kirim path file jika ada
         )
         return jsonify({'rpp': hasil_rpp})
     except Exception as e:
