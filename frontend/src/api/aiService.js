@@ -4,31 +4,30 @@ import { getAuthHeader } from './authService';
 
 const API_URL = 'http://localhost:5000/api';
 
-// --- Fungsi untuk menghasilkan RPP dari AI ---
-export const generateRppFromAI = async (data) => {
+// --- FUNGSI BARU UNTUK ANALISIS REFERENSI ---
+export const analyzeReference = async (formData) => {
     try {
-        const formData = new FormData();
-        formData.append('mapel', data.mapel);
-        formData.append('jenjang', data.jenjang);
-        formData.append('topik', data.topik);
-        formData.append('alokasi_waktu', data.alokasi_waktu);
-        // Support multiple files (data.fileReferensList or data.file_paths)
-        if (data.fileReferensList && Array.isArray(data.fileReferensList)) {
-            data.fileReferensList.forEach(file => {
-                formData.append('file_paths', file);
-            });
-        } else if (data.file_paths && Array.isArray(data.file_paths)) {
-            data.file_paths.forEach(file => {
-                formData.append('file_paths', file);
-            });
-        } else if (data.file) {
-            // fallback for single file
-            formData.append('file_paths', data.file);
+        const response = await fetch(`${API_URL}/analyze-referensi`, {
+            method: 'POST',
+            headers: {
+                'Authorization': getAuthHeader(),
+            },
+            body: formData,
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menganalisis referensi.');
         }
-        if (data.pendekatan_pedagogis) {
-            formData.append('pendekatan_pedagogis', data.pendekatan_pedagogis);
-        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error analyzing reference:", error);
+        throw error;
+    }
+};
 
+// --- FUNGSI-FUNGSI UNTUK RPP ---
+export const generateRppFromAI = async (formData) => {
+    try {
         const response = await fetch(`${API_URL}/generate-rpp`, {
             method: 'POST',
             headers: {
@@ -48,7 +47,6 @@ export const generateRppFromAI = async (data) => {
     }
 };
 
-// --- Fungsi untuk menyimpan RPP ---
 export const simpanRpp = async (rppData) => {
     try {
         const response = await fetch(`${API_URL}/rpp`, {
@@ -70,7 +68,6 @@ export const simpanRpp = async (rppData) => {
     }
 };
 
-// --- NEW: Fungsi untuk mendapatkan semua RPP ---
 export const getAllRpps = async () => {
     try {
         const response = await fetch(`${API_URL}/rpp`, {
@@ -89,7 +86,6 @@ export const getAllRpps = async () => {
     }
 };
 
-// --- NEW: Fungsi untuk mendapatkan RPP berdasarkan ID ---
 export const getRppById = async (idRpp) => {
     try {
         const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
@@ -108,7 +104,6 @@ export const getRppById = async (idRpp) => {
     }
 };
 
-// --- NEW FUNCTION: Update RPP ---
 export const updateRpp = async (idRpp, rppData) => {
     try {
         const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
@@ -130,7 +125,6 @@ export const updateRpp = async (idRpp, rppData) => {
     }
 };
 
-// --- NEW FUNCTION: Delete RPP ---
 export const deleteRpp = async (idRpp) => {
     try {
         const response = await fetch(`${API_URL}/rpp/${idRpp}`, {
@@ -150,25 +144,22 @@ export const deleteRpp = async (idRpp) => {
     }
 };
 
-// --- NEW FUNCTION: Download RPP PDF ---
 export const downloadRppPdf = async (idRpp, rppTitle) => {
     try {
         const response = await fetch(`${API_URL}/rpp/${idRpp}/pdf`, {
-            method: 'GET', // Menggunakan GET karena hanya mengambil resource
+            method: 'GET',
             headers: {
                 'Authorization': getAuthHeader()
             }
         });
 
         if (!response.ok) {
-            // Coba baca pesan error dari backend jika ada, jika tidak, lempar error generik.
-            // Perhatikan bahwa response.json() hanya bisa dipanggil sekali.
             const contentType = response.headers.get("content-type");
             if (contentType && contentType.indexOf("application/json") !== -1) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || `Gagal mengunduh RPP PDF untuk ID ${idRpp}.`);
+                throw new Error(errorData.message || `Gagal mengunduh RPP PDF.`);
             } else {
-                throw new Error(`Gagal mengunduh RPP PDF untuk ID ${idRpp}. Status: ${response.status}`);
+                throw new Error(`Gagal mengunduh RPP PDF. Status: ${response.status}`);
             }
         }
 
@@ -176,12 +167,11 @@ export const downloadRppPdf = async (idRpp, rppTitle) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${rppTitle.replace(/[^a-z0-9]/gi, '_') || 'RPP'}.pdf`; // Bersihkan nama file
+        a.download = `${rppTitle.replace(/[^a-z0-9]/gi, '_') || 'RPP'}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url); // Bersihkan URL objek
-
+        window.URL.revokeObjectURL(url);
         return { message: 'RPP PDF berhasil diunduh!' };
     } catch (error) {
         console.error("Error downloading RPP PDF:", error);
@@ -189,7 +179,7 @@ export const downloadRppPdf = async (idRpp, rppTitle) => {
     }
 };
 
-// --- Fungsi untuk menghasilkan soal dari AI ---
+// --- FUNGSI-FUNGSI UNTUK SOAL ---
 export const generateSoalFromAI = async (data) => {
     try {
         const response = await fetch(`${API_URL}/generate-soal`, {
@@ -200,7 +190,6 @@ export const generateSoalFromAI = async (data) => {
             },
             body: JSON.stringify(data),
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Gagal menghasilkan soal dari AI.');
@@ -212,7 +201,6 @@ export const generateSoalFromAI = async (data) => {
     }
 };
 
-// --- Fungsi untuk menyimpan Soal ---
 export const simpanSoal = async (soalData) => {
     try {
         const response = await fetch(`${API_URL}/soal`, {
@@ -234,7 +222,6 @@ export const simpanSoal = async (soalData) => {
     }
 };
 
-// --- NEW: Fungsi untuk mendapatkan semua Soal ---
 export const getAllSoal = async () => {
     try {
         const response = await fetch(`${API_URL}/soal`, {
@@ -253,7 +240,6 @@ export const getAllSoal = async () => {
     }
 };
 
-// --- NEW: Fungsi untuk mendapatkan Soal berdasarkan ID ---
 export const getSoalById = async (idSoal) => {
     try {
         const response = await fetch(`${API_URL}/soal/${idSoal}`, {
@@ -272,7 +258,6 @@ export const getSoalById = async (idSoal) => {
     }
 };
 
-// --- NEW: Fungsi untuk menghapus Soal berdasarkan ID ---
 export const deleteSoal = async (idSoal) => {
     try {
         const response = await fetch(`${API_URL}/soal/${idSoal}`, {
@@ -292,60 +277,28 @@ export const deleteSoal = async (idSoal) => {
     }
 };
 
-export const downloadExamPdf = async (examTitle, questions, layoutSettings = {}) => {
+// --- FUNGSI-FUNGSI UNTUK UJIAN ---
+export const saveExam = async (examData) => {
     try {
-        // Validasi questionsData
-        if (!questions || !Array.isArray(questions) || questions.length === 0) {
-            throw new Error('Data soal tidak valid atau kosong untuk diunduh.');
-        }
-        // Pastikan layoutSettings adalah objek, jika tidak, inisialisasi sebagai objek kosong
-        if (!layoutSettings || typeof layoutSettings !== 'object') {
-            layoutSettings = {}; 
-        }
-
-        const response = await fetch(`${API_URL}/generate-exam-pdf`, {
+        const response = await fetch(`${API_URL}/ujian`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': getAuthHeader()
             },
-            body: JSON.stringify({ 
-                exam_title: examTitle, 
-                questions: questions,
-                layout: layoutSettings 
-            }),
+            body: JSON.stringify(examData)
         });
-
-        // Periksa status respons sebelum mencoba membaca blob
         if (!response.ok) {
-            // Coba baca pesan error dari backend jika ada, jika tidak, lempar error generik.
-            // Perhatikan bahwa response.json() hanya bisa dipanggil sekali.
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Gagal mengunduh PDF ujian.');
-            } else {
-                throw new Error(`Gagal mengunduh PDF ujian. Status: ${response.status}`);
-            }
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal menyimpan ujian');
         }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${examTitle.replace(/[^a-zA-Z0-9]/g, '_')}_ujian.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-        return { message: 'PDF berhasil diunduh' }; // Berikan pesan sukses
+        return await response.json();
     } catch (error) {
-        console.error("Error downloading exam PDF:", error);
+        console.error("Error saving exam:", error);
         throw error;
     }
 };
 
-// NEW: Fungsi untuk mendapatkan semua Ujian
 export const getAllExams = async () => {
     try {
         const response = await fetch(`${API_URL}/ujian`, {
@@ -364,13 +317,11 @@ export const getAllExams = async () => {
     }
 };
 
-// NEW: Fungsi untuk mendapatkan Ujian berdasarkan ID (jika diperlukan detail spesifik)
 export const getExamById = async (idUjian) => {
     try {
-        const authHeader = getAuthHeader();
         const response = await fetch(`${API_URL}/ujian/${idUjian}`, {
             headers: {
-                'Authorization': authHeader
+                'Authorization': getAuthHeader()
             }
         });
         if (!response.ok) {
@@ -384,7 +335,6 @@ export const getExamById = async (idUjian) => {
     }
 };
 
-// NEW: Fungsi untuk menghapus Ujian berdasarkan ID
 export const deleteExam = async (idUjian) => {
     try {
         const response = await fetch(`${API_URL}/ujian/${idUjian}`, {
@@ -404,24 +354,50 @@ export const deleteExam = async (idUjian) => {
     }
 };
 
-// --- Fungsi untuk menyimpan Ujian (dengan tambahan layout) ---
-export const saveExam = async (examData) => {
+export const downloadExamPdf = async (examTitle, questions, layoutSettings = {}) => {
     try {
-        const response = await fetch(`${API_URL}/ujian`, {
+        if (!questions || !Array.isArray(questions) || questions.length === 0) {
+            throw new Error('Data soal tidak valid atau kosong untuk diunduh.');
+        }
+        if (!layoutSettings || typeof layoutSettings !== 'object') {
+            layoutSettings = {}; 
+        }
+
+        const response = await fetch(`${API_URL}/generate-exam-pdf`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': getAuthHeader()
             },
-            body: JSON.stringify(examData)
+            body: JSON.stringify({ 
+                exam_title: examTitle, 
+                questions: questions,
+                layout: layoutSettings 
+            }),
         });
+
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Gagal menyimpan ujian');
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Gagal mengunduh PDF ujian.');
+            } else {
+                throw new Error(`Gagal mengunduh PDF ujian. Status: ${response.status}`);
+            }
         }
-        return await response.json();
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${examTitle.replace(/[^a-zA-Z0-9]/g, '_')}_ujian.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        return { message: 'PDF berhasil diunduh' };
     } catch (error) {
-        console.error("Error saving exam:", error);
+        console.error("Error downloading exam PDF:", error);
         throw error;
     }
 };

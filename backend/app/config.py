@@ -1,4 +1,3 @@
-# backend/app/core/config.py
 import os
 
 class Config:
@@ -8,3 +7,4 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'kunci-rahasia-super-aman-untuk-jwt'
     GEMINI_MODEL = os.environ.get('GEMINI_MODEL') or 'gemini-1.5-flash'
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')

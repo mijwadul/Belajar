@@ -1,11 +1,9 @@
-# backend/app/__init__.py
-
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
-from .config import Config # [cite: 2]
+from .config import Config
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -20,15 +18,16 @@ def create_app():
     app.config["JWT_SECRET_KEY"] = Config.JWT_SECRET_KEY
     app.config["JWT_TOKEN_LOCATION"] = ["headers"]
     app.config["JWT_CSRF_PROTECTION"] = False
-    # PENTING: Tambahkan baris ini untuk memuat GEMINI_MODEL
-    app.config["GEMINI_MODEL"] = Config.GEMINI_MODEL # [cite: 2]
-
+    app.config["GEMINI_MODEL"] = Config.GEMINI_MODEL
+    
+    # --- PERBAIKAN DI SINI ---
+    # Tambahkan baris ini untuk memuat kunci API ke dalam konfigurasi aplikasi
+    app.config["GEMINI_API_KEY"] = Config.GEMINI_API_KEY
 
     # --- INISIALISASI EKSTENSI ---
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    # Untuk pengembangan, izinkan semua origin dan header (bisa diperketat lagi nanti)
     CORS(
         app,
         resources={r"/api/.*": {"origins": "*"}},
