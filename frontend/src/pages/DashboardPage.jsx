@@ -51,8 +51,15 @@ import { getAllRpps, getAllSoal } from '../api/aiService';
 
 // Fungsi helper untuk mendapatkan data pengguna dari localStorage
 const getUserData = () => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    const userStr = localStorage.getItem('user');
+    if (userStr && userStr !== 'undefined') {
+      try {
+        return JSON.parse(userStr);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
 };
 
 function DashboardPage() {

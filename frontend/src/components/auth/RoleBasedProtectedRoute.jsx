@@ -4,9 +4,13 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 
 const getUserRole = () => {
-  const user = localStorage.getItem('user');
-  if (user) {
-    return JSON.parse(user).role;
+  const userStr = localStorage.getItem('user');
+  if (userStr && userStr !== 'undefined') {
+    try {
+      return JSON.parse(userStr).role;
+    } catch (e) {
+      return null;
+    }
   }
   return null;
 };

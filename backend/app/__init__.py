@@ -28,11 +28,13 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    # Untuk pengembangan, izinkan semua origin dan header (bisa diperketat lagi nanti)
     CORS(
-        app, 
-        resources={r"/api/.*": {"origins": "http://localhost:3000"}}, 
+        app,
+        resources={r"/api/.*": {"origins": "*"}},
         supports_credentials=True,
-        allow_headers=["Authorization", "Content-Type"] # <-- Tambahkan ini
+        allow_headers=["*"],
+        expose_headers=["Content-Type", "Authorization"]
     )
 
     # --- DAFTARKAN BLUEPRINT ---

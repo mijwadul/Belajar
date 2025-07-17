@@ -1,7 +1,21 @@
 # backend/app/api/classroom.py
 
 from flask import Blueprint, request, jsonify
-from datetime import date
+from datetime import date, datetime
+# Fungsi untuk parsing tanggal lahir dari berbagai format
+def parse_tanggal_lahir(tanggal_str):
+    if not tanggal_str:
+        return None
+    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d.%m.%Y", "%Y.%m.%d"):
+        try:
+            return datetime.strptime(tanggal_str, fmt).date()
+        except ValueError:
+            continue
+    # fallback: coba fromisoformat
+    try:
+        return date.fromisoformat(tanggal_str)
+    except Exception:
+        return None
 from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa, JawabanSiswa # Import JawabanSiswa
 from app import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -75,7 +89,7 @@ def kelola_satu_kelas(id_kelas):
                 'nis': siswa_obj.nis,
                 'nisn': siswa_obj.nisn,
                 'tempat_lahir': siswa_obj.tempat_lahir,
-                'tanggal_lahir': siswa_obj.tanggal_lahir.isoformat() if siswa_obj.tanggal_lahir else None,
+                'tanggal_lahir': siswa_obj.tanggal_lahir.strftime('%d %b %Y') if siswa_obj.tanggal_lahir else None,
                 'jenis_kelamin': siswa_obj.jenis_kelamin,
                 'agama': siswa_obj.agama,
                 'alamat': siswa_obj.alamat,
@@ -194,7 +208,7 @@ def lihat_siswa_di_kelas(id_kelas):
             'nis': siswa_obj.nis,
             'nisn': siswa_obj.nisn,
             'tempat_lahir': siswa_obj.tempat_lahir,
-            'tanggal_lahir': siswa_obj.tanggal_lahir.isoformat() if siswa_obj.tanggal_lahir else None,
+            'tanggal_lahir': siswa_obj.tanggal_lahir.strftime('%d %b %Y') if siswa_obj.tanggal_lahir else None,
             'jenis_kelamin': siswa_obj.jenis_kelamin,
             'agama': siswa_obj.agama,
             'alamat': siswa_obj.alamat,
@@ -267,12 +281,10 @@ def bulk_import_siswa(kelas_id):
             else:
                 try:
                     tanggal_lahir_str = student_data.get('tanggal_lahir')
-                    tanggal_lahir_obj = None
-                    if tanggal_lahir_str:
-                        tanggal_lahir_obj = date.fromisoformat(tanggal_lahir_str)
-                except ValueError:
+                    tanggal_lahir_obj = parse_tanggal_lahir(tanggal_lahir_str)
+                except Exception:
                     fail_count += 1
-                    errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena format Tanggal Lahir salah: '{tanggal_lahir_str or 'kosong'}' (harus GAAP-MM-DD).")
+                    errors.append(f"Gagal impor siswa '{nama_lengkap}' (NISN: {current_nisn}) karena format Tanggal Lahir salah: '{tanggal_lahir_str or 'kosong'}' (format didukung: dd-mm-yyyy, yyyy-mm-dd, yyyy/mm/dd, dll)")
                     sub_transaction.rollback()
                     continue
 

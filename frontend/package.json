@@ -9,6 +9,7 @@
     "@mui/material": "^5.15.20",
     "docx": "^8.5.0",
     "file-saver": "^2.0.5",
+    "framer-motion": "^12.23.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.1.0",

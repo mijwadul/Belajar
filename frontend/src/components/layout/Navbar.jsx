@@ -55,7 +55,11 @@ function Navbar() {
             const authStatus = isAuthenticated();
             setIsAuth(authStatus);
             if (authStatus) {
-                const user = JSON.parse(localStorage.getItem('user'));
+                let userStr = localStorage.getItem('user');
+                let user = null;
+                try {
+                  if (userStr && userStr !== 'undefined') user = JSON.parse(userStr);
+                } catch (e) { user = null; }
                 setUserRole(user ? user.role : null);
             } else {
                 setUserRole(null);

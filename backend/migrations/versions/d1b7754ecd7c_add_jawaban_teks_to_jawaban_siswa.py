@@ -1,8 +1,8 @@
-"""Initial database setup with Ujian model
+"""add jawaban_teks to jawaban_siswa
 
-Revision ID: 8a95c5ccf7e4
+Revision ID: d1b7754ecd7c
 Revises: 
-Create Date: 2025-07-09 20:45:14.122245
+Create Date: 2025-07-17 14:02:36.345440
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '8a95c5ccf7e4'
+revision = 'd1b7754ecd7c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -81,6 +81,7 @@ def upgrade():
     sa.Column('konten_json', sa.Text(), nullable=False),
     sa.Column('tanggal_dibuat', sa.DateTime(), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('pengaturan_layout', sa.Text(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], name='fk_ujian_user_id'),
     sa.PrimaryKeyConstraint('id')
     )
