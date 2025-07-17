@@ -192,11 +192,12 @@ function RppGeneratorPage() {
         try {
             const formData = new FormData();
             fileReferensList.forEach((file) => {
-                formData.append('file_paths', file);
+                formData.append('file', file);
             });
+            const token = localStorage.getItem('token');
             const response = await fetch('http://localhost:5000/api/analyze-referensi', {
                 method: 'POST',
-                headers: { 'Authorization': localStorage.getItem('token') },
+                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
             if (!response.ok) {
