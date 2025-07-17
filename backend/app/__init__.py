@@ -28,12 +28,12 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    # Untuk pengembangan, izinkan semua origin dan header (bisa diperketat lagi nanti)
+    # Untuk pengembangan, izinkan hanya frontend lokal dan dukung kredensial
     CORS(
         app,
-        resources={r"/api/.*": {"origins": "*"}},
+        resources={r"/api/*": {"origins": "http://localhost:3000"}},
         supports_credentials=True,
-        allow_headers=["*"],
+        allow_headers=["Content-Type", "Authorization"],
         expose_headers=["Content-Type", "Authorization"]
     )
 

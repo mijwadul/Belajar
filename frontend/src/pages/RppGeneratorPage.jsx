@@ -1,10 +1,9 @@
-// frontend/src/pages/RppGeneratorPage.jsx
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { generateRppFromAI, simpanRpp } from '../api/aiService'; // Pastikan generateRppFromAI dan simpanRpp diimpor
-import { getKelas } from '../api/classroomService'; // Untuk mendapatkan daftar kelas untuk pilihan simpan RPP
-import ReactMarkdown from 'react-markdown'; // Untuk render markdown
+import { generateRppFromAI, simpanRpp } from '../api/aiService';
+import { getKelas } from '../api/classroomService';
+import ReactMarkdown from 'react-markdown';
 import {
     Container, Grid, Paper, Typography, Button, Box,
     TextField, Select, MenuItem, FormControl, InputLabel,
@@ -16,7 +15,7 @@ import SendIcon from '@mui/icons-material/Send';
 import SaveIcon from '@mui/icons-material/Save';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'; // Pastikan ini diimpor
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 function RppGeneratorPage() {
     const navigate = useNavigate();
@@ -26,9 +25,8 @@ function RppGeneratorPage() {
     const [selectedKelasUntukGenerateId, setSelectedKelasUntukGenerateId] = useState(''); // ID kelas yang dipilih untuk GENERATE
     // mapel dan jenjang akan diambil dari objek kelas yang dipilih
     const [topik, setTopik] = useState('');
-    const [alokasiWaktu, setAlokasiWaktu] = useState('');
-    const [fileReferens, setFileReferens] = useState(null); // State untuk file
-    const [pendekatanPedagogis, setPendekatanPedagogis] = useState(''); // State baru sesuai backend
+    const [alokasiWaktu, setAlokasiWaktu] = useState('2 x 45 menit'); // Default value
+    const [fileReferensList, setFileReferensList] = useState([]); // State untuk banyak file
 
     // Result and loading states
     const [generatedRpp, setGeneratedRpp] = useState('');
@@ -36,6 +34,12 @@ function RppGeneratorPage() {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+        // Reference analysis states
+    const [analysisOpen, setAnalysisOpen] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [useExtracted, setUseExtracted] = useState(false);
 
     // Save RPP dialog states
     const [openSaveDialog, setOpenSaveDialog] = useState(false);
@@ -77,13 +81,15 @@ function RppGeneratorPage() {
     };
 
     const handleFileChange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            setFileReferens(file);
-            showSnackbar(`File '${file.name}' siap diunggah.`, 'info');
-        } else {
-            setFileReferens(null);
+        const files = Array.from(event.target.files);
+        if (files.length > 0) {
+            setFileReferensList(prev => [...prev, ...files]);
+            showSnackbar(`${files.length} file siap diunggah.`, 'info');
         }
+    };
+
+    const handleRemoveFile = (index) => {
+        setFileReferensList(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleSubmit = async (event) => {
@@ -91,8 +97,9 @@ function RppGeneratorPage() {
         setIsLoading(true);
         setGeneratedRpp(''); // Clear previous RPP
 
-        if (!selectedKelasUntukGenerateId || !topik || !alokasiWaktu) {
-            showSnackbar('Mohon lengkapi semua field yang wajib diisi (Kelas, Topik, Alokasi Waktu).', 'warning');
+        // Topic required only if no file is uploaded
+        if (!selectedKelasUntukGenerateId || (fileReferensList.length === 0 && !topik) || !alokasiWaktu) {
+            showSnackbar('Mohon lengkapi semua field yang wajib diisi (Kelas, Topik jika tidak ada file, Alokasi Waktu).', 'warning');
             setIsLoading(false);
             return;
         }
@@ -110,16 +117,17 @@ function RppGeneratorPage() {
             // Contoh output: "SD Kelas 1A", "SMP Kelas 7B"
             const jenjangForAI = `${selectedClass.jenjang} Kelas ${selectedClass.nama_kelas}`; 
 
-            const dataToGenerate = {
-                mapel: selectedClass.mata_pelajaran, // Ambil dari objek kelas
-                jenjang: jenjangForAI, // Menggunakan string jenjang yang lebih spesifik
-                topik,
-                alokasi_waktu: alokasiWaktu,
-                file: fileReferens, // Kirim objek File
-                pendekatan_pedagogis: pendekatanPedagogis, // Kirim parameter baru
-            };
+            // Prepare FormData for file uploads
+            const formData = new FormData();
+            formData.append('mapel', selectedClass.mata_pelajaran);
+            formData.append('jenjang', jenjangForAI);
+            formData.append('topik', topik);
+            formData.append('alokasi_waktu', alokasiWaktu);
+            fileReferensList.forEach((file, idx) => {
+                formData.append('file_paths', file);
+            });
 
-            const response = await generateRppFromAI(dataToGenerate); // Memanggil AI Service
+            const response = await generateRppFromAI(formData); // Memanggil AI Service
             setGeneratedRpp(response.rpp);
             showSnackbar('RPP berhasil dibuat!', 'success');
         } catch (error) {
@@ -173,19 +181,37 @@ function RppGeneratorPage() {
         }
     };
 
-    const pendekatanOptions = [
-        'Konvensional (Teacher-Centered)',
-        'Student-Centered Learning (SCL)',
-        'Project-Based Learning (PBL)',
-        'Problem-Based Learning (PBL)',
-        'Discovery Learning',
-        'Inquiry-Based Learning',
-        'Cooperative Learning',
-        'Contextual Teaching and Learning (CTL)',
-        'Pendekatan Ilmiah (Scientific Approach)',
-        'Blended Learning',
-        'Diferensiasi Pembelajaran'
-    ];
+    // Handler for processing references
+    const handleAnalyzeReferences = async () => {
+        if (fileReferensList.length === 0) {
+            showSnackbar('Silakan upload minimal satu file referensi.', 'warning');
+            return;
+        }
+        setIsAnalyzing(true);
+        setAnalysisResult(null);
+        try {
+            const formData = new FormData();
+            fileReferensList.forEach((file) => {
+                formData.append('file_paths', file);
+            });
+            const response = await fetch('http://localhost:5000/api/analyze-referensi', {
+                method: 'POST',
+                headers: { 'Authorization': localStorage.getItem('token') },
+                body: formData
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Gagal menganalisis referensi.');
+            }
+            const data = await response.json();
+            setAnalysisResult(data);
+            setAnalysisOpen(true);
+        } catch (error) {
+            showSnackbar(error.message, 'error');
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
 
 
     return (
@@ -248,7 +274,8 @@ function RppGeneratorPage() {
                                 label="Topik / Judul Materi Pokok"
                                 value={topik}
                                 onChange={(e) => setTopik(e.target.value)}
-                                required
+                                required={fileReferensList.length === 0}
+                                helperText={fileReferensList.length > 0 ? 'Topik tidak wajib jika file referensi diunggah.' : 'Topik wajib diisi jika tidak ada file.'}
                             />
                             <TextField
                                 fullWidth
@@ -256,26 +283,15 @@ function RppGeneratorPage() {
                                 value={alokasiWaktu}
                                 onChange={(e) => setAlokasiWaktu(e.target.value)}
                                 required
+                                helperText="Default: 2 x 45 menit"
                             />
                             {/* Indikator Pembelajaran dan Tujuan Pembelajaran DIHAPUS, akan digenerate AI */}
                             
-                            <FormControl fullWidth>
-                                <InputLabel>Pendekatan Pedagogis (Opsional)</InputLabel>
-                                <Select
-                                    value={pendekatanPedagogis}
-                                    label="Pendekatan Pedagogis (Opsional)"
-                                    onChange={(e) => setPendekatanPedagogis(e.target.value)}
-                                >
-                                    <MenuItem value="">Pilih Pendekatan</MenuItem>
-                                    {pendekatanOptions.map((approach) => (
-                                        <MenuItem key={approach} value={approach}>{approach}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+
                             <Box sx={{ mt: 2 }}>
                                 <Typography variant="subtitle1" gutterBottom>
-                                    Unggah File Referensi (PDF/DOCX/TXT - Opsional)
-                                    <Tooltip title="Unggah materi pembelajaran, buku, atau referensi lain yang akan menjadi dasar pembuatan RPP. AI akan memprioritaskan konten dari file ini.">
+                                    Unggah File Referensi (PDF/DOCX/TXT/JPG/PNG - Opsional)
+                                    <Tooltip title="Unggah materi pembelajaran, buku, atau referensi lain, termasuk foto dari kamera. AI akan memprioritaskan konten dari file-file ini.">
                                         <IconButton size="small">
                                             <InfoOutlinedIcon fontSize="small" />
                                         </IconButton>
@@ -287,14 +303,80 @@ function RppGeneratorPage() {
                                     startIcon={<FileUploadIcon />}
                                     fullWidth
                                 >
-                                    {fileReferens ? fileReferens.name : 'Pilih File'}
-                                    <input type="file" hidden onChange={handleFileChange} accept=".pdf,.docx,.txt" />
+                                    Tambah File
+                                    <input type="file" hidden multiple onChange={handleFileChange} accept=".pdf,.docx,.txt,.jpg,.jpeg,.png" />
                                 </Button>
-                                {fileReferens && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                                        File: {fileReferens.name} ({Math.round(fileReferens.size / 1024)} KB)
-                                    </Typography>
+                                {fileReferensList.length > 0 && (
+                                    <Box sx={{ mt: 1 }}>
+                                        {fileReferensList.map((file, idx) => (
+                                            <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                                                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                                                    {file.name} ({Math.round(file.size / 1024)} KB)
+                                                </Typography>
+                                                <Button size="small" color="error" onClick={() => handleRemoveFile(idx)}>
+                                                    Hapus
+                                                </Button>
+                                            </Box>
+                                        ))}
+                                    </Box>
                                 )}
+                                <Button
+                                    variant="contained"
+                                    color="secondary"
+                                    sx={{ mt: 2 }}
+                                    onClick={handleAnalyzeReferences}
+                                    disabled={isAnalyzing || fileReferensList.length === 0}
+                                >
+                                    {isAnalyzing ? 'Memproses Referensi...' : 'Proses Referensi'}
+                                </Button>
+            {/* Popup hasil analisis referensi */}
+            <Dialog open={analysisOpen} onClose={() => setAnalysisOpen(false)} maxWidth="md" fullWidth>
+                <DialogTitle>Hasil Analisis Referensi</DialogTitle>
+                <DialogContent dividers>
+                    {analysisResult ? (
+                        <Box>
+                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(analysisResult, null, 2)}</pre>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                sx={{ mt: 2 }}
+                                onClick={() => {
+                                    // Gunakan hasil ekstraksi untuk mengisi form RPP
+                                    if (analysisResult) {
+                                        setTopik(analysisResult.materi_pokok || '');
+                                        setAlokasiWaktu('2 x 45 menit');
+                                        setUseExtracted(true);
+                                        setAnalysisOpen(false);
+                                        showSnackbar('Data referensi berhasil diambil untuk pembuatan RPP.', 'success');
+                                    }
+                                }}
+                            >
+                                Gunakan Data Referensi untuk RPP
+                            </Button>
+                        </Box>
+                    ) : (
+                        <Typography>Memproses referensi...</Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAnalysisOpen(false)} color="primary">Tutup</Button>
+                </DialogActions>
+            </Dialog>
+                               
+            {/* Popup hasil analisis referensi */}
+            <Dialog open={analysisOpen} onClose={() => setAnalysisOpen(false)} maxWidth="md" fullWidth>
+                <DialogTitle>Hasil Analisis Referensi</DialogTitle>
+                <DialogContent dividers>
+                    {analysisResult ? (
+                        <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(analysisResult, null, 2)}</pre>
+                    ) : (
+                        <Typography>Memproses referensi...</Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAnalysisOpen(false)} color="primary">Tutup</Button>
+                </DialogActions>
+            </Dialog>
                             </Box>
                             
                             <Button

@@ -12,8 +12,18 @@ export const generateRppFromAI = async (data) => {
         formData.append('jenjang', data.jenjang);
         formData.append('topik', data.topik);
         formData.append('alokasi_waktu', data.alokasi_waktu);
-        if (data.file) {
-            formData.append('file', data.file);
+        // Support multiple files (data.fileReferensList or data.file_paths)
+        if (data.fileReferensList && Array.isArray(data.fileReferensList)) {
+            data.fileReferensList.forEach(file => {
+                formData.append('file_paths', file);
+            });
+        } else if (data.file_paths && Array.isArray(data.file_paths)) {
+            data.file_paths.forEach(file => {
+                formData.append('file_paths', file);
+            });
+        } else if (data.file) {
+            // fallback for single file
+            formData.append('file_paths', data.file);
         }
         if (data.pendekatan_pedagogis) {
             formData.append('pendekatan_pedagogis', data.pendekatan_pedagogis);

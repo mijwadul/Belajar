@@ -29,44 +29,149 @@ class AIService:
     # def _extract_text_from_docx(self, file_path): ...
     # def _extract_text_from_txt(self, file_path): ...
 
-    def generate_rpp_from_ai(self, mapel, jenjang, topik, alokasi_waktu, file_path=None):
+    def generate_rpp_from_ai(self, mapel, jenjang, topik, alokasi_waktu, file_paths=None):
         """
-        Membuat draf RPP, dengan file sebagai konteks jika disediakan.
+        Membuat draf RPP, dengan satu atau lebih file sebagai konteks jika disediakan.
         `jenjang` diharapkan sudah dalam format spesifik seperti "SD Kelas 1A".
+        file_paths: list of file paths (pdf, docx, txt, image)
         """
         prompt_parts = []
-        document_context_text = ""
+        document_context_texts = []
 
-        if file_path:
-            file_extension = os.path.splitext(file_path)[1].lower()
-            if file_extension == '.pdf':
-                document_context_text = self._extract_text_from_pdf(file_path)
-            # elif file_extension == '.docx':
-            #     document_context_text = self._extract_text_from_docx(file_path)
-            # elif file_extension == '.txt':
-            #     document_context_text = self._extract_text_from_txt(file_path)
-            else:
-                print(f"Warning: Tipe file '{file_extension}' tidak didukung untuk ekstraksi teks.")
-        
-        # Tambahkan teks dokumen yang diekstrak ke prompt jika ada, dengan penekanan sebagai REFERENSI UTAMA
-        if document_context_text:
-            prompt_parts.append(f"Materi utama untuk RPP ini diambil dari dokumen referensi berikut. Mohon gunakan dokumen ini sebagai sumber utama dan ikuti alur serta inti dari dokumen tersebut:\n---\n{document_context_text}\n---\n\n")
+        # --- NEW: Ekstraksi isi file dan deteksi otomatis jika input kosong ---
+        extracted_texts = []
+        file_bibliografi = []
+        if file_paths:
+            for file_path in file_paths:
+                file_extension = os.path.splitext(file_path)[1].lower()
+                file_bibliografi.append(os.path.basename(file_path))
+                text = None
+                if file_extension == '.pdf':
+                    text = self._extract_text_from_pdf(file_path)
+                # elif file_extension == '.docx':
+                #     text = self._extract_text_from_docx(file_path)
+                # elif file_extension == '.txt':
+                #     text = self._extract_text_from_txt(file_path)
+                elif file_extension in ['.jpg', '.jpeg', '.png']:
+                    try:
+                        import pytesseract
+                        from PIL import Image
+                        img = Image.open(file_path)
+                        text = pytesseract.image_to_string(img)
+                    except Exception as e:
+                        print(f"Gagal ekstrak teks dari gambar {file_path}: {e}")
+                if text:
+                    extracted_texts.append(text)
+        # --- END EKSTRAKSI ---
+
+        # --- NEW: Deteksi otomatis topik/mapel/kelas jika input kosong ---
+        # (Sederhana: ambil kalimat pertama/keyword dari file, bisa dikembangkan NLP lebih lanjut)
+        if (not topik or not mapel or not jenjang) and extracted_texts:
+            combined_text = "\n".join(extracted_texts)
+            if not topik:
+                topik = combined_text.split(". ")[0][:100]  # Ambil kalimat pertama max 100 char
+            if not mapel:
+                mapel = "(deteksi otomatis)"  # Bisa pakai NLP/regex untuk mapel
+            if not jenjang:
+                jenjang = "(deteksi otomatis)"  # Bisa pakai NLP/regex untuk jenjang
+
+        if file_paths:
+            for file_path in file_paths:
+                file_extension = os.path.splitext(file_path)[1].lower()
+                if file_extension == '.pdf':
+                    text = self._extract_text_from_pdf(file_path)
+                    if text:
+                        document_context_texts.append(text)
+                # elif file_extension == '.docx':
+                #     text = self._extract_text_from_docx(file_path)
+                #     if text:
+                #         document_context_texts.append(text)
+                # elif file_extension == '.txt':
+                #     text = self._extract_text_from_txt(file_path)
+                #     if text:
+                #         document_context_texts.append(text)
+                elif file_extension in ['.jpg', '.jpeg', '.png']:
+                    # For images, use OCR to extract text (future-proof for mobile/camera)
+                    try:
+                        import pytesseract
+                        from PIL import Image
+                        img = Image.open(file_path)
+                        text = pytesseract.image_to_string(img)
+                        if text:
+                            document_context_texts.append(f"[Ekstraksi dari gambar: {os.path.basename(file_path)}]\n{text}")
+                    except Exception as e:
+                        print(f"Gagal ekstrak teks dari gambar {file_path}: {e}")
+                else:
+                    print(f"Warning: Tipe file '{file_extension}' tidak didukung untuk ekstraksi teks.")
+
+        # Gabungkan semua konteks dokumen
+        if extracted_texts:
+            prompt_parts.append(
+                "PERHATIAN: File referensi berikut WAJIB dijadikan sumber utama dalam seluruh isi RPP. Seluruh tujuan, aktivitas, asesmen, dan komponen RPP harus relevan dan terhubung dengan isi file ini. Jika ada bagian yang tidak relevan, prioritaskan isi file.\n---\n"
+                + "\n---\n".join(extracted_texts)
+                + "\n---\n\n"
+            )
+    # Untuk pengembangan ke depan: support multiple file uploads (camera, dokumen, dsb)
+    # Pastikan frontend mengirimkan file_paths sebagai list
 
         prompt_parts.append(f"""
-Anda adalah seorang ahli Kurikulum Merdeka di Indonesia.
-Berdasarkan informasi di bawah ini, tolong buatkan draf Modul Ajar yang sangat detail.
-Fokus pada **{jenjang}** untuk penyesuaian konten dan pedagogi.
+Anda adalah AI yang bertugas membuat RPP Kurikulum Merdeka berbasis Deep Learning untuk guru Indonesia.
+Buat RPP satu lembar yang STRUKTUR dan ISINYA WAJIB memenuhi kriteria berikut:
 
-**Informasi Modul Ajar:**
+📋 Kriteria RPP Kurikulum Merdeka Berbasis Deep Learning
+1. Tujuan Pembelajaran Berbasis Capaian (CP) yang Bermakna
+   - Berdasarkan CP Kurikulum Merdeka (Kemendikbud, 2022)
+   - Tujuan: pemahaman konsep mendalam, kompetensi esensial, profil pelajar Pancasila
+2. Aktivitas Pembelajaran: Mendalam, Aktif, Reflektif
+   - Berpikir kritis, analitis, kreatif (HOTS, C3–C6)
+   - Pemecahan masalah nyata, eksplorasi aktif, diskusi, studi kasus, eksperimen, refleksi
+3. Keterlibatan Emosi dan Kesadaran (Mindful Learning)
+   - Sentuh sisi emosional, sosial, dan motivasi intrinsik siswa
+   - Bangun kesadaran penuh (mindfulness)
+4. Asesmen Formatif dan Autentik
+   - Observasi, portofolio, proyek, presentasi, rubrik kualitatif, umpan balik naratif, refleksi
+5. Pembelajaran Berdiferensiasi
+   - Akomodasi minat, kesiapan, gaya belajar, pilihan tugas/media/ekspresi
+6. Berbasis Proyek dan Kontekstual
+   - PBL/PJBL, konteks lokal, isu nyata, kolaborasi lintas muatan
+7. Integrasi Profil Pelajar Pancasila
+   - Wajib memuat 1–2 dimensi profil (misal: kritis, mandiri, kreatif, global)
+8. Struktur RPP Satu Lembar
+   - Tujuan Pembelajaran
+   - Langkah-langkah Pembelajaran (Aktivitas)
+   - Asesmen Pembelajaran
+   - Substansi mendalam dan transformatif
+
+Gunakan seluruh input berikut secara eksplisit dan relevan dalam setiap bagian RPP:
 - Fase/Kelas: {jenjang}
 - Mata Pelajaran: {mapel}
 - Topik/Materi Pokok: {topik}
 - Alokasi Waktu: {alokasi_waktu}
 
-Sertakan komponen-komponen RPP yang lengkap (Pendahuluan, Kegiatan Inti, Penutup, Penilaian, Sumber Belajar, dll.).
-**Pastikan Indikator Pembelajaran dan Tujuan Pembelajaran juga Anda hasilkan** berdasarkan topik dan materi.
-Format RPP dalam Markdown.
-""")
+Jika ada file referensi, pastikan seluruh isi RPP (tujuan, aktivitas, asesmen, dsb) benar-benar relevan dan terhubung dengan isi file tersebut.
+Jika tidak ada file, tetap ikuti kriteria Kurikulum Merdeka Deep Learning.
+
+Format output markdown WAJIB mengikuti ringkasan berikut:
+
+| Komponen   | Kriteria Deep Learning |
+|------------|-----------------------|
+| Tujuan     | Berdasarkan CP, bermakna, menumbuhkan profil Pancasila |
+| Aktivitas  | Eksplorasi, refleksi, pemecahan masalah nyata |
+| Asesmen    | Formatif, autentik, reflektif |
+| Diferensiasi| Minat, kesiapan, gaya belajar |
+| Metode     | PJBL/PBL, kolaboratif, kontekstual |
+| Karakter   | Critical thinking, kreatif, peduli |
+| Emosi      | Mindful, meaningful, durable |
+| Profil Pancasila | Disisipkan dalam kegiatan dan asesmen |
+
+Tampilkan RPP dalam format markdown yang rapi, terstruktur, dan mudah dipahami. Jangan tambahkan penjelasan di luar RPP.
+
+# Daftar Pustaka
+Cantumkan daftar pustaka/file referensi berikut di akhir RPP:
+"""
+        )
+        if file_bibliografi:
+            prompt_parts.append("\n".join(f"- {f}" for f in file_bibliografi))
 
         full_prompt = "".join(prompt_parts)
         

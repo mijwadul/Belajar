@@ -37,7 +37,8 @@ const FIELD_MAPPING = [
     { key: 'jenis_kelamin', display: 'Jenis Kelamin' },
     { key: 'agama', display: 'Agama' },
     { key: 'alamat', display: 'Alamat' },
-    { key: 'nomor_hp', display: 'Nomor HP' }
+    { key: 'nomor_hp', display: 'Nomor HP' },
+    { key: 'nama_orang_tua', display: 'Nama Orang Tua' }
 ];
 
 function StudentManagementPage() {
@@ -53,7 +54,7 @@ function StudentManagementPage() {
     const [openAddDialog, setOpenAddDialog] = useState(false);
     const [newStudentData, setNewStudentData] = useState({
         nama_lengkap: '', nisn: '', nis: '', tempat_lahir: '',
-        tanggal_lahir: '', jenis_kelamin: 'Laki-laki', agama: 'Islam', alamat: '', nomor_hp: ''
+        tanggal_lahir: '', jenis_kelamin: 'Laki-laki', agama: 'Islam', alamat: '', nomor_hp: '', nama_orang_tua: ''
     });
 
     // State for Edit Student Dialog
@@ -643,6 +644,7 @@ function StudentManagementPage() {
                                     <TableCell>Jenis Kelamin</TableCell>
                                     <TableCell>Tanggal Lahir</TableCell>
                                     <TableCell>Agama</TableCell>
+                                    <TableCell>Nama Orang Tua</TableCell>
                                     <TableCell align="right">Aksi</TableCell>
                                 </TableRow>
                             </TableHead>
@@ -664,6 +666,7 @@ function StudentManagementPage() {
                                             <TableCell>{siswa.jenis_kelamin}</TableCell>
                                             <TableCell>{siswa.tanggal_lahir}</TableCell>
                                             <TableCell>{siswa.agama}</TableCell>
+                                            <TableCell>{siswa.nama_orang_tua || '-'}</TableCell>
                                             <TableCell align="right">
                                                 <IconButton size="small" onClick={() => handleOpenEditDialog(siswa)}>
                                                     <EditIcon fontSize="small" />
@@ -698,6 +701,7 @@ function StudentManagementPage() {
                                 <MenuItem value="Perempuan">Perempuan</MenuItem>
                             </Select>
                         </FormControl>
+                        <TextField fullWidth label="Nama Orang Tua" name="nama_orang_tua" value={newStudentData.nama_orang_tua} onChange={handleNewStudentChange} />
                         <FormControl fullWidth>
                             <InputLabel>Agama</InputLabel>
                             <Select name="agama" value={newStudentData.agama} label="Agama" onChange={handleNewStudentChange}>

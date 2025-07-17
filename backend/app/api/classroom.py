@@ -93,7 +93,8 @@ def kelola_satu_kelas(id_kelas):
                 'jenis_kelamin': siswa_obj.jenis_kelamin,
                 'agama': siswa_obj.agama,
                 'alamat': siswa_obj.alamat,
-                'nomor_hp': siswa_obj.nomor_hp
+                'nomor_hp': siswa_obj.nomor_hp,
+                'nama_orang_tua': siswa_obj.nama_orang_tua
             })
         respons_kelas = {
             'id': kelas.id,
@@ -148,16 +149,23 @@ def tambah_siswa():
         if existing_siswa:
             return jsonify({'message': f"Siswa dengan NISN {data['nisn']} sudah ada."}), 409
 
+    # Normalisasi jenis_kelamin
+    jk = data.get('jenis_kelamin')
+    if jk == 'L':
+        jk = 'Laki-laki'
+    elif jk == 'P':
+        jk = 'Perempuan'
     siswa_baru = Siswa(
         nama_lengkap=data.get('nama_lengkap'),
         nisn=data.get('nisn'),
         nis=data.get('nis'),
         tempat_lahir=data.get('tempat_lahir'),
         tanggal_lahir=date.fromisoformat(data['tanggal_lahir']) if data.get('tanggal_lahir') else None,
-        jenis_kelamin=data.get('jenis_kelamin'),
+        jenis_kelamin=jk,
         agama=data.get('agama'),
         alamat=data.get('alamat'),
-        nomor_hp=data.get('nomor_hp')
+        nomor_hp=data.get('nomor_hp'),
+        nama_orang_tua=data.get('nama_orang_tua')
     )
     db.session.add(siswa_baru)
     db.session.commit()
@@ -212,7 +220,8 @@ def lihat_siswa_di_kelas(id_kelas):
             'jenis_kelamin': siswa_obj.jenis_kelamin,
             'agama': siswa_obj.agama,
             'alamat': siswa_obj.alamat,
-            'nomor_hp': siswa_obj.nomor_hp
+            'nomor_hp': siswa_obj.nomor_hp,
+            'nama_orang_tua': siswa_obj.nama_orang_tua
         })
     
     return jsonify(hasil_siswa)
@@ -288,16 +297,22 @@ def bulk_import_siswa(kelas_id):
                     sub_transaction.rollback()
                     continue
 
+                jk = student_data.get('jenis_kelamin')
+                if jk == 'L':
+                    jk = 'Laki-laki'
+                elif jk == 'P':
+                    jk = 'Perempuan'
                 siswa_obj = Siswa(
                     nama_lengkap=nama_lengkap,
                     nisn=current_nisn,
                     nis=student_data.get('nis'),
                     tempat_lahir=student_data.get('tempat_lahir'),
                     tanggal_lahir=tanggal_lahir_obj,
-                    jenis_kelamin=student_data.get('jenis_kelamin'),
+                    jenis_kelamin=jk,
                     agama=student_data.get('agama'),
                     alamat=student_data.get('alamat'),
-                    nomor_hp=student_data.get('nomor_hp')
+                    nomor_hp=student_data.get('nomor_hp'),
+                    nama_orang_tua=student_data.get('nama_orang_tua')
                 )
                 db.session.add(siswa_obj) 
                 db.session.flush()
@@ -461,10 +476,16 @@ def update_siswa(id_siswa):
     siswa.tempat_lahir = data.get('tempat_lahir', siswa.tempat_lahir)
     if data.get('tanggal_lahir') is not None:
         siswa.tanggal_lahir = date.fromisoformat(data['tanggal_lahir']) if data['tanggal_lahir'] else None
-    siswa.jenis_kelamin = data.get('jenis_kelamin', siswa.jenis_kelamin)
+    jk = data.get('jenis_kelamin', siswa.jenis_kelamin)
+    if jk == 'L':
+        jk = 'Laki-laki'
+    elif jk == 'P':
+        jk = 'Perempuan'
+    siswa.jenis_kelamin = jk
     siswa.agama = data.get('agama', siswa.agama)
     siswa.alamat = data.get('alamat', siswa.alamat)
     siswa.nomor_hp = data.get('nomor_hp', siswa.nomor_hp)
+    siswa.nama_orang_tua = data.get('nama_orang_tua', siswa.nama_orang_tua)
 
     db.session.commit()
     return jsonify({'message': 'Data siswa berhasil diperbarui!'})

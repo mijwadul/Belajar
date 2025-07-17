@@ -92,6 +92,7 @@ class Siswa(db.Model):
     agama = db.Column(db.String(50), nullable=True)
     alamat = db.Column(db.Text, nullable=True)
     nomor_hp = db.Column(db.String(20), nullable=True)
+    nama_orang_tua = db.Column(db.String(150), nullable=True)
     absensi = db.relationship('Absensi', backref='siswa', lazy=True, cascade="all, delete-orphan")
     jawaban = db.relationship('JawabanSiswa', backref='pemilik', lazy=True, cascade="all, delete-orphan")
 

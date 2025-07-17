@@ -1,3 +1,208 @@
+import pytesseract
+from PIL import Image
+import PyPDF2
+import tempfile
+import shutil
+import os
+import json as pyjson
+from flask import Blueprint, request, jsonify, current_app, send_file, after_this_request
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+from .decorators import roles_required
+from ..services.ai_service import AIService
+bp = Blueprint('ai_api', __name__, url_prefix='/api')
+# ...existing code...
+
+@bp.route('/analyze-referensi', methods=['POST'])
+@jwt_required()
+@roles_required(['Admin', 'Guru', 'Super User'])
+def analyze_referensi_endpoint():
+    """
+    Endpoint untuk ekstraksi dan analisis file referensi (gambar, teks, dokumen)
+    Mengembalikan hasil ekstraksi terstruktur untuk digunakan dalam pembuatan RPP.
+    """
+    files = request.files.getlist('file_paths')
+    extracted_texts = []
+    bibliografi = []
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for file_storage in files:
+            filename = file_storage.filename
+            bibliografi.append(filename)
+            file_ext = os.path.splitext(filename)[1].lower()
+            file_path = os.path.join(temp_dir, filename)
+            file_storage.save(file_path)
+            text = None
+            if file_ext == '.pdf':
+                try:
+                    with open(file_path, 'rb') as f:
+                        reader = PyPDF2.PdfReader(f)
+                        text = "\n".join([page.extract_text() or '' for page in reader.pages])
+                except Exception as e:
+                    text = f"[Gagal ekstrak PDF: {e}]"
+            elif file_ext in ['.jpg', '.jpeg', '.png']:
+                try:
+                    img = Image.open(file_path)
+                    text = pytesseract.image_to_string(img)
+                except Exception as e:
+                    text = f"[Gagal OCR gambar: {e}]"
+            elif file_ext in ['.txt']:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        text = f.read()
+                except Exception as e:
+                    text = f"[Gagal baca TXT: {e}]"
+            else:
+                text = '[Format file tidak didukung untuk ekstraksi otomatis]'
+            if text:
+                extracted_texts.append({'filename': filename, 'text': text})
+
+        # Gabungkan semua teks untuk prompt analisis
+        combined_text = "\n\n".join([t['text'] for t in extracted_texts])
+        # Prompt analisis sesuai instruksi user
+        analysis_prompt = f"""
+Saya akan memberikan satu atau beberapa referensi berupa gambar, teks, atau potongan isi buku pelajaran, modul ajar, atau bahan ajar. Tolong bantu saya menganalisis isi referensi tersebut untuk kemudian disusun menjadi **RPP Kurikulum Merdeka** dengan pendekatan **Deep Learning**.
+
+Tugas AI:
+
+1. Ekstrak semua informasi penting dari referensi yang diberikan, termasuk namun tidak terbatas pada:
+   - Tujuan pembelajaran
+   - Materi inti
+   - Contoh aktivitas atau praktik
+   - Proyek siswa (jika ada)
+   - Petunjuk asesmen dan evaluasi
+   - Nilai-nilai Profil Pelajar Pancasila yang terlibat
+
+2. Kelompokkan hasil ekstraksi ke dalam komponen-komponen utama RPP:
+   - Capaian Pembelajaran (CP)
+   - Tujuan Pembelajaran (TP)
+   - Indikator Pembelajaran
+   - Materi Pokok
+   - Metode dan Aktivitas Pembelajaran
+   - Asesmen dan Refleksi Pembelajaran
+   - Penerapan nilai-nilai Profil Pelajar Pancasila
+
+Referensi yang diberikan:\n\n{combined_text}\n\n
+Jawab dalam format JSON terstruktur dengan field: cp, tp, indikator, materi_pokok, aktivitas, asesmen, profil_pancasila, bibliografi.
+"""
+        ai_service_instance = AIService(current_app.config['GEMINI_MODEL'])
+        ai_response = ai_service_instance.model.generate_content(analysis_prompt)
+        try:
+            if hasattr(ai_response, 'parts') and ai_response.parts:
+                ai_text = "".join([part.text for part in ai_response.parts])
+            else:
+                ai_text = ai_response.text
+            # Cari JSON di dalam teks
+            start = ai_text.find('{')
+            end = ai_text.rfind('}') + 1
+            if start != -1 and end != -1:
+                json_str = ai_text[start:end]
+                result = pyjson.loads(json_str)
+            else:
+                result = {'raw': ai_text}
+        except Exception as e:
+            result = {'error': f'Gagal parsing hasil AI: {e}', 'raw': ai_text}
+        result['bibliografi'] = bibliografi
+        return jsonify(result), 200
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+## (moved below Blueprint definition)
+    """
+    Endpoint untuk ekstraksi dan analisis file referensi (gambar, teks, dokumen)
+    Mengembalikan hasil ekstraksi terstruktur untuk digunakan dalam pembuatan RPP.
+    """
+    import pytesseract
+    from PIL import Image
+    import PyPDF2
+    import tempfile
+    import shutil
+    import os
+    files = request.files.getlist('file_paths')
+    extracted_texts = []
+    bibliografi = []
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for file_storage in files:
+            filename = file_storage.filename
+            bibliografi.append(filename)
+            file_ext = os.path.splitext(filename)[1].lower()
+            file_path = os.path.join(temp_dir, filename)
+            file_storage.save(file_path)
+            text = None
+            if file_ext == '.pdf':
+                try:
+                    with open(file_path, 'rb') as f:
+                        reader = PyPDF2.PdfReader(f)
+                        text = "\n".join([page.extract_text() or '' for page in reader.pages])
+                except Exception as e:
+                    text = f"[Gagal ekstrak PDF: {e}]"
+            elif file_ext in ['.jpg', '.jpeg', '.png']:
+                try:
+                    img = Image.open(file_path)
+                    text = pytesseract.image_to_string(img)
+                except Exception as e:
+                    text = f"[Gagal OCR gambar: {e}]"
+            elif file_ext in ['.txt']:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        text = f.read()
+                except Exception as e:
+                    text = f"[Gagal baca TXT: {e}]"
+            else:
+                text = '[Format file tidak didukung untuk ekstraksi otomatis]'
+            if text:
+                extracted_texts.append({'filename': filename, 'text': text})
+
+        # Gabungkan semua teks untuk prompt analisis
+        combined_text = "\n\n".join([t['text'] for t in extracted_texts])
+        # Prompt analisis sesuai instruksi user
+        analysis_prompt = f"""
+Saya akan memberikan satu atau beberapa referensi berupa gambar, teks, atau potongan isi buku pelajaran, modul ajar, atau bahan ajar. Tolong bantu saya menganalisis isi referensi tersebut untuk kemudian disusun menjadi **RPP Kurikulum Merdeka** dengan pendekatan **Deep Learning**.
+
+Tugas AI:
+
+1. Ekstrak semua informasi penting dari referensi yang diberikan, termasuk namun tidak terbatas pada:
+   - Tujuan pembelajaran
+   - Materi inti
+   - Contoh aktivitas atau praktik
+   - Proyek siswa (jika ada)
+   - Petunjuk asesmen dan evaluasi
+   - Nilai-nilai Profil Pelajar Pancasila yang terlibat
+
+2. Kelompokkan hasil ekstraksi ke dalam komponen-komponen utama RPP:
+   - Capaian Pembelajaran (CP)
+   - Tujuan Pembelajaran (TP)
+   - Indikator Pembelajaran
+   - Materi Pokok
+   - Metode dan Aktivitas Pembelajaran
+   - Asesmen dan Refleksi Pembelajaran
+   - Penerapan nilai-nilai Profil Pelajar Pancasila
+
+Referensi yang diberikan:\n\n{combined_text}\n\n
+Jawab dalam format JSON terstruktur dengan field: cp, tp, indikator, materi_pokok, aktivitas, asesmen, profil_pancasila, bibliografi.
+"""
+        ai_service_instance = AIService(current_app.config['GEMINI_MODEL'])
+        ai_response = ai_service_instance.model.generate_content(analysis_prompt)
+        # Ambil hasil JSON dari AI
+        import json as pyjson
+        try:
+            if hasattr(ai_response, 'parts') and ai_response.parts:
+                ai_text = "".join([part.text for part in ai_response.parts])
+            else:
+                ai_text = ai_response.text
+            # Cari JSON di dalam teks
+            start = ai_text.find('{')
+            end = ai_text.rfind('}') + 1
+            if start != -1 and end != -1:
+                json_str = ai_text[start:end]
+                result = pyjson.loads(json_str)
+            else:
+                result = {'raw': ai_text}
+        except Exception as e:
+            result = {'error': f'Gagal parsing hasil AI: {e}', 'raw': ai_text}
+        result['bibliografi'] = bibliografi
+        return jsonify(result), 200
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 # backend/app/api/ai_tools.py
 
 import json
@@ -20,7 +225,10 @@ import random
 
 import io 
 
+
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
+
+
 
 # --- RUTE UNTUK RPP ---
 
@@ -36,44 +244,42 @@ def generate_rpp_endpoint():
     if not all(k in data for k in required_fields):
         return jsonify({'message': 'Data input tidak lengkap. Pastikan mapel, jenjang, topik, alokasi_waktu terisi.'}), 400
 
-    file_upload = request.files.get('file')
-    
-    file_path = None
-    if file_upload:
-        if file_upload.filename == '':
-            return jsonify({"message": "Tidak ada file yang dipilih, tetapi form file ada."}), 400
-        
-        allowed_extensions = {'pdf', 'docx', 'txt'}
-        filename_ext = file_upload.filename.rsplit('.', 1)[1].lower() if '.' in file_upload.filename else ''
-        
-        if filename_ext not in allowed_extensions:
-            return jsonify({"message": f"Format file .{filename_ext} tidak didukung. Hanya {', '.join(allowed_extensions).upper()} yang diizinkan."}), 400
-        
-        temp_dir = os.path.join(os.getcwd(), 'temp_uploads')
-        os.makedirs(temp_dir, exist_ok=True)
-        unique_filename = str(uuid.uuid4()) + '.' + filename_ext
-        file_path = os.path.join(temp_dir, unique_filename)
-        
-        try:
-            file_upload.save(file_path)
-        except Exception as e:
-            return jsonify({'message': f'Gagal menyimpan file sementara: {e}'}), 500
-
+    # Handle multiple file uploads (file_paths)
+    file_paths = []
+    allowed_extensions = {'pdf', 'docx', 'txt', 'jpg', 'jpeg', 'png'}
+    temp_dir = os.path.join(os.getcwd(), 'temp_uploads')
+    os.makedirs(temp_dir, exist_ok=True)
     try:
+        for file_key in request.files:
+            file_storage = request.files[file_key]
+            if file_storage.filename == '':
+                continue
+            filename_ext = file_storage.filename.rsplit('.', 1)[1].lower() if '.' in file_storage.filename else ''
+            if filename_ext not in allowed_extensions:
+                return jsonify({"message": f"Format file .{filename_ext} tidak didukung. Hanya {', '.join(allowed_extensions).upper()} yang diizinkan."}), 400
+            unique_filename = str(uuid.uuid4()) + '.' + filename_ext
+            file_path = os.path.join(temp_dir, unique_filename)
+            try:
+                file_storage.save(file_path)
+                file_paths.append(file_path)
+            except Exception as e:
+                return jsonify({'message': f'Gagal menyimpan file sementara: {e}'}), 500
+
         hasil_rpp = ai_service_instance.generate_rpp_from_ai(
             mapel=data['mapel'],
             jenjang=data['jenjang'],
             topik=data['topik'],
             alokasi_waktu=data['alokasi_waktu'],
-            file_path=file_path
+            file_paths=file_paths if file_paths else None
         )
         return jsonify({'rpp': hasil_rpp}), 200
     except Exception as e:
         print(f"Error saat memanggil AI untuk RPP: {e}")
         return jsonify({'message': f'Terjadi kesalahan internal: {e}'}), 500
     finally:
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
+        for file_path in file_paths:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
 
 @bp.route('/rpp', methods=['POST'])
 @jwt_required()
