@@ -1,7 +1,8 @@
 # backend/app/api/auth.py
 
 from flask import Blueprint, request, jsonify
-from ..models.classroom_model import User, db, UserRole
+from ..models import User, UserRole, Sekolah # Impor dari paket models
+from .. import db # Impor db dari app utama
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt, get_jwt_identity 
 from functools import wraps # Tambahkan import ini
@@ -84,23 +85,27 @@ def get_all_users():
 
 @bp.route('/create-user', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
+@roles_required(['Admin', 'Super User'])
 def create_user():
     """Endpoint untuk membuat pengguna baru (khusus Admin/Super User)."""
-    # Peran sudah diperiksa oleh decorator roles_required
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
     nama_lengkap = data.get('nama_lengkap')
-    role_str = data.get('role') # 'Guru' atau 'Admin'
+    role_str = data.get('role')
+    sekolah_id = data.get('sekolah_id') # <-- Ambil sekolah_id dari request
 
     if not all([email, password, nama_lengkap, role_str]):
-        return jsonify({'error': 'Semua field harus diisi.'}), 400
+        return jsonify({'error': 'Semua field wajib diisi.'}), 400
 
     try:
         role_enum = UserRole[role_str.upper().replace(" ", "_")]
     except KeyError:
         return jsonify({'error': f'Peran "{role_str}" tidak valid.'}), 400
+
+    # --- Validasi Baru ---
+    if role_enum in [UserRole.ADMIN, UserRole.GURU] and not sekolah_id:
+        return jsonify({'error': 'Sekolah wajib dipilih untuk peran Admin dan Guru.'}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email sudah terdaftar.'}), 409
@@ -108,14 +113,15 @@ def create_user():
     new_user = User(
         email=email,
         nama_lengkap=nama_lengkap,
-        role=role_enum
+        role=role_enum,
+        sekolah_id=sekolah_id if role_enum != UserRole.SUPER_USER else None # <-- Simpan sekolah_id
     )
     new_user.set_password(password)
 
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': f'Pengguna {nama_lengkap} berhasil dibuat dengan peran {role_str}.', 'user': new_user.to_dict()}), 201
+    return jsonify({'message': f'Pengguna {nama_lengkap} berhasil dibuat.', 'user': new_user.to_dict()}), 201
 
 @bp.route('/users/<int:id>', methods=['GET'])
 @jwt_required()
@@ -128,10 +134,9 @@ def get_user(id):
 
 @bp.route('/users/<int:user_id>', methods=['PUT'])
 @jwt_required()
-@roles_required(['Admin', 'Super User']) # Tambahkan proteksi peran
+@roles_required(['Admin', 'Super User'])
 def update_user(user_id):
     """Endpoint untuk memperbarui data pengguna."""
-    # Peran sudah diperiksa oleh decorator roles_required
     user_to_update = User.query.get_or_404(user_id)
     data = request.get_json()
 
@@ -141,15 +146,28 @@ def update_user(user_id):
 
     user_to_update.nama_lengkap = data.get('nama_lengkap', user_to_update.nama_lengkap)
     user_to_update.email = data.get('email', user_to_update.email)
-
+    
+    # --- Logika Update Peran dan Sekolah ---
     if 'role' in data:
         role_str = data.get('role')
         try:
             role_enum = UserRole[role_str.upper().replace(" ", "_")]
             user_to_update.role = role_enum
+
+            # Jika diubah menjadi Super User, hapus sekolah_id
+            if role_enum == UserRole.SUPER_USER:
+                user_to_update.sekolah_id = None
+            # Jika diubah menjadi Admin/Guru, pastikan sekolah_id ada
+            elif 'sekolah_id' in data:
+                user_to_update.sekolah_id = data.get('sekolah_id')
+
         except KeyError:
             return jsonify({'error': f'Peran "{role_str}" tidak valid.'}), 400
 
+    # Jika hanya sekolah yang diubah
+    elif 'sekolah_id' in data and user_to_update.role != UserRole.SUPER_USER:
+         user_to_update.sekolah_id = data.get('sekolah_id')
+    
     password = data.get('password')
     if password:
         user_to_update.set_password(password)

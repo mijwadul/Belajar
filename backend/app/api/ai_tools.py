@@ -1,3 +1,5 @@
+# backend/app/api/ai_tools.py
+
 import json
 import os
 import uuid
@@ -6,10 +8,10 @@ import shutil
 import io
 import random
 
-from flask import Blueprint, request, jsonify, current_app, send_file
+from flask import Blueprint, request, jsonify, current_app, send_file, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
-from app.models.classroom_model import RPP, Kelas, Soal, Ujian, User
+from ..models import RPP, Soal, Ujian, Kelas, User
+from .. import db
 from app.services.ai_service import AIService
 from app.api.auth import roles_required
 
@@ -23,13 +25,33 @@ from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
 from reportlab.lib.units import inch
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
-ai_service_instance = AIService(current_app.config.get('GEMINI_MODEL', 'gemini-1.5-flash'))
 
+# --- PERBAIKAN DIMULAI DI SINI ---
 
+# 1. Fungsi Bantuan untuk mendapatkan instance AIService
+def get_ai_service():
+    """
+    Membuat atau mendapatkan instance AIService untuk request saat ini.
+    Ini memastikan instance hanya dibuat sekali per request dan memiliki akses
+    ke konfigurasi aplikasi yang sudah aktif.
+    """
+    if 'ai_service' not in g:
+        api_key = current_app.config.get('GEMINI_API_KEY')
+        model_name = current_app.config.get('GEMINI_MODEL', 'gemini-1.5-flash')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY tidak ditemukan di konfigurasi aplikasi.")
+        g.ai_service = AIService(api_key=api_key, model_name=model_name)
+    return g.ai_service
+
+# 2. Hapus instance global:
+# baris "ai_service_instance = AIService(...)" dihapus dari sini.
+
+# 3. Gunakan get_ai_service() di setiap endpoint
 @bp.route('/analyze-referensi', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def analyze_referensi_endpoint():
+    ai_service = get_ai_service() # <--- Gunakan fungsi ini
     if 'file' not in request.files:
         return jsonify({'message': 'Request harus menyertakan setidaknya satu file.'}), 400
 
@@ -48,14 +70,14 @@ def analyze_referensi_endpoint():
                 file_path = os.path.join(temp_dir, file_storage.filename)
                 file_storage.save(file_path)
                 
-                extracted_text = ai_service_instance.extract_text_from_file(file_path)
+                extracted_text = ai_service.extract_text_from_file(file_path)
                 combined_text += extracted_text + "\n\n"
                 bibliography.append(file_storage.filename)
 
         if not combined_text.strip():
             return jsonify({'message': 'Gagal mengekstrak teks dari file atau semua file kosong.'}), 400
 
-        analysis_result = ai_service_instance.analyze_reference_text(combined_text)
+        analysis_result = ai_service.analyze_reference_text(combined_text)
         analysis_result['bibliografi'] = bibliography
 
         return jsonify(analysis_result)
@@ -71,6 +93,7 @@ def analyze_referensi_endpoint():
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_rpp_endpoint():
+    ai_service = get_ai_service() # <--- Gunakan fungsi ini
     data = request.form
     required_fields = ['mapel', 'jenjang', 'topik', 'alokasi_waktu']
     if not all(k in data for k in required_fields):
@@ -100,7 +123,7 @@ def generate_rpp_endpoint():
             "nama_penyusun": user.nama_lengkap
         }
         
-        hasil_rpp = ai_service_instance.generate_rpp_from_ai(
+        hasil_rpp = ai_service.generate_rpp_from_ai(
             rpp_data=rpp_data,
             file_paths=file_paths
         )
@@ -191,13 +214,14 @@ def delete_rpp(id_rpp):
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def generate_soal_endpoint():
+    ai_service = get_ai_service() # <--- Gunakan fungsi ini
     data = request.get_json()
     if not data or not all(k in data for k in ['rpp_id', 'jenis_soal', 'jumlah_soal', 'taksonomi_bloom_level']):
         return jsonify({'message': 'Data input tidak lengkap.'}), 400
 
     rpp = RPP.query.get_or_404(data['rpp_id'])
     try:
-        hasil_soal_json_str = ai_service_instance.generate_soal_from_ai(
+        hasil_soal_json_str = ai_service.generate_soal_from_ai(
             sumber_materi=rpp.konten_markdown,
             jenis_soal=data['jenis_soal'],
             jumlah_soal=data['jumlah_soal'],
@@ -208,6 +232,9 @@ def generate_soal_endpoint():
         current_app.logger.error(f"Error saat memanggil AI untuk soal: {e}", exc_info=True)
         return jsonify({'message': f'Terjadi kesalahan internal: {e}'}), 500
 
+# (Endpoint lainnya seperti simpan_soal, lihat_semua_soal, dll tetap sama)
+
+# ... [PASTIKAN SEMUA FUNGSI ENDPOINT LAINNYA JUGA SAMA] ...
 @bp.route('/soal', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])

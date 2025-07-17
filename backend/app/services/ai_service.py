@@ -9,10 +9,10 @@ from flask import current_app
 pytesseract.pytesseract.tesseract_cmd = r'D:\Games\Tesseract\tesseract.exe'
 
 class AIService:
-    def __init__(self, model_name='gemini-1.5-flash'):
-        self.api_key = current_app.config.get('GEMINI_API_KEY')
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY tidak ditemukan di konfigurasi.")
+    def __init__(self, api_key, model_name='gemini-1.5-flash'):
+        if not api_key:
+            raise ValueError("Kunci API Gemini harus disediakan.")
+        self.api_key = api_key
         
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(model_name)
@@ -22,7 +22,8 @@ class AIService:
             response = self.model.generate_content(prompt_parts)
             return response.text
         except Exception as e:
-            current_app.logger.error(f"Error saat menghubungi Gemini API: {e}", exc_info=True)
+            # Menggunakan logger dari Flask butuh current_app, jadi kita ganti dengan print untuk skrip standalone
+            print(f"Error saat menghubungi Gemini API: {e}")
             raise RuntimeError(f"Gagal menghasilkan konten dari AI: {e}")
 
     def extract_text_from_file(self, file_path):

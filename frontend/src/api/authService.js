@@ -1,6 +1,7 @@
 // frontend/src/api/authService.js
 
-const API_URL = 'http://localhost:5000/api/auth'; // Sesuaikan jika API Anda berjalan di port atau domain lain
+// Menggunakan URL dasar yang lebih fleksibel
+const API_BASE_URL = 'http://localhost:5000/api';
 
 // Fungsi untuk mendapatkan token dari localStorage
 const getToken = () => {
@@ -16,7 +17,7 @@ export const getAuthHeader = () => {
 // Fungsi untuk mendaftarkan pengguna baru
 export const registerUser = async (userData) => {
     try {
-        const response = await fetch(`${API_URL}/register`, {
+        const response = await fetch(`${API_BASE_URL}/auth/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -37,7 +38,7 @@ export const registerUser = async (userData) => {
 // Fungsi untuk login pengguna
 export const loginUser = async (credentials) => {
     try {
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -49,7 +50,7 @@ export const loginUser = async (credentials) => {
             throw new Error(data.error || 'Gagal login.');
         }
         localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user)); // Simpan info user
+        localStorage.setItem('user', JSON.stringify(data.user));
         return data;
     } catch (error) {
         console.error('Error during login:', error);
@@ -65,14 +66,13 @@ export const logoutUser = () => {
 
 // Fungsi untuk memeriksa apakah pengguna terautentikasi
 export const isAuthenticated = () => {
-    // Cukup periksa apakah token ada
     return !!getToken();
 };
 
-// Fungsi untuk mendapatkan semua pengguna (khusus Admin)
+// Fungsi untuk mendapatkan semua pengguna (khusus Admin/Super User)
 export const getAllUsers = async () => {
     try {
-        const response = await fetch(`${API_URL}/users`, {
+        const response = await fetch(`${API_BASE_URL}/auth/users`, {
             headers: {
                 'Authorization': getAuthHeader()
             }
@@ -88,10 +88,10 @@ export const getAllUsers = async () => {
     }
 };
 
-// Fungsi untuk membuat pengguna baru (khusus Admin)
+// Fungsi untuk membuat pengguna baru (khusus Admin/Super User)
 export const createUser = async (userData) => {
     try {
-        const response = await fetch(`${API_URL}/create-user`, {
+        const response = await fetch(`${API_BASE_URL}/auth/create-user`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -110,10 +110,10 @@ export const createUser = async (userData) => {
     }
 };
 
-// Fungsi untuk menghapus pengguna (khusus Admin)
+// Fungsi untuk menghapus pengguna (khusus Admin/Super User)
 export const deleteUser = async (userId) => {
     try {
-        const response = await fetch(`${API_URL}/users/${userId}`, {
+        const response = await fetch(`${API_BASE_URL}/auth/users/${userId}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': getAuthHeader()
@@ -130,10 +130,10 @@ export const deleteUser = async (userId) => {
     }
 };
 
-// Fungsi untuk mendapatkan pengguna berdasarkan ID (khusus Admin)
+// Fungsi untuk mendapatkan pengguna berdasarkan ID (khusus Admin/Super User)
 export const getUserById = async (userId) => {
     try {
-        const response = await fetch(`${API_URL}/users/${userId}`, {
+        const response = await fetch(`${API_BASE_URL}/auth/users/${userId}`, {
             headers: {
                 'Authorization': getAuthHeader()
             }
@@ -149,10 +149,10 @@ export const getUserById = async (userId) => {
     }
 };
 
-// Fungsi untuk memperbarui pengguna (khusus Admin)
+// Fungsi untuk memperbarui pengguna (khusus Admin/Super User)
 export const updateUser = async (userId, userData) => {
     try {
-        const response = await fetch(`${API_URL}/users/${userId}`, {
+        const response = await fetch(`${API_BASE_URL}/auth/users/${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -167,6 +167,48 @@ export const updateUser = async (userId, userData) => {
         return data;
     } catch (error) {
         console.error('Error updating user:', error);
+        throw error;
+    }
+};
+
+// Fungsi untuk mendapatkan semua sekolah
+export const getAllSekolah = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/sekolah`, {
+            headers: {
+                'Authorization': getAuthHeader()
+            }
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || 'Gagal memuat daftar sekolah.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching all sekolah:', error);
+        throw error;
+    }
+};
+
+// --- FUNGSI BARU DITAMBAHKAN DI SINI ---
+// Fungsi untuk membuat sekolah baru (khusus Admin/Super User)
+export const createSekolah = async (sekolahData) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/sekolah`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': getAuthHeader()
+            },
+            body: JSON.stringify(sekolahData),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || 'Gagal menambahkan sekolah baru.');
+        }
+        return data;
+    } catch (error) {
+        console.error('Error creating sekolah:', error);
         throw error;
     }
 };

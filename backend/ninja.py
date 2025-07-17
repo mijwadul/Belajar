@@ -1,8 +1,11 @@
-# backend/create_superuser.py
+# backend/ninja.py
 
 import os
+from dotenv import load_dotenv  # <-- 1. TAMBAHKAN BARIS INI
 from app import create_app, db
-from app.models.classroom_model import User, UserRole
+from app.models.user_model import User, UserRole
+
+load_dotenv()  # <-- 2. TAMBAHKAN BARIS INI
 
 # Buat instance aplikasi untuk mendapatkan konteks
 app = create_app()

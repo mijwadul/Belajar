@@ -1,6 +1,6 @@
 # backend/app/api/classroom.py
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from datetime import date, datetime
 # Fungsi untuk parsing tanggal lahir dari berbagai format
 def parse_tanggal_lahir(tanggal_str):
@@ -16,8 +16,8 @@ def parse_tanggal_lahir(tanggal_str):
         return date.fromisoformat(tanggal_str)
     except Exception:
         return None
-from app.models.classroom_model import Kelas, Siswa, Absensi, UserRole, kelas_siswa, JawabanSiswa # Import JawabanSiswa
-from app import db
+from ..models import RPP, Soal, Ujian, Kelas, Siswa, Absensi, User, UserRole, kelas_siswa, Sekolah # Impor model yang dibutuhkan
+from .. import db # Impor db dari app utama
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.api.auth import roles_required
 from sqlalchemy.exc import IntegrityError
@@ -25,51 +25,115 @@ from sqlalchemy import or_
 
 bp = Blueprint('classroom_api', __name__, url_prefix='/api')
 
+@bp.route('/sekolah', methods=['GET', 'POST'])
+@jwt_required()
+@roles_required(['Super User', 'Admin'])
+def kelola_sekolah():
+    # Jika metodenya POST, kita buat sekolah baru
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data or not data.get('nama_sekolah'):
+            return jsonify({'message': 'Nama sekolah wajib diisi.'}), 400
+
+        nama_sekolah = data['nama_sekolah']
+        # Cek apakah sekolah dengan nama yang sama sudah ada
+        if Sekolah.query.filter_by(nama_sekolah=nama_sekolah).first():
+            return jsonify({'message': f'Sekolah dengan nama "{nama_sekolah}" sudah ada.'}), 409
+
+        sekolah_baru = Sekolah(
+            nama_sekolah=nama_sekolah,
+            alamat=data.get('alamat', '')
+        )
+        db.session.add(sekolah_baru)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Sekolah berhasil ditambahkan!',
+            'sekolah': {
+                'id': sekolah_baru.id,
+                'nama_sekolah': sekolah_baru.nama_sekolah
+            }
+        }), 201
+
+    # Jika metodenya GET, kita kembalikan daftar sekolah (logika yang sudah ada)
+    if request.method == 'GET':
+        try:
+            semua_sekolah = Sekolah.query.order_by(Sekolah.nama_sekolah).all()
+            hasil = [{
+                'id': s.id,
+                'nama_sekolah': s.nama_sekolah
+            } for s in semua_sekolah]
+            return jsonify(hasil)
+        except Exception as e:
+            current_app.logger.error(f"Error saat mengambil daftar sekolah: {e}")
+            return jsonify({"message": "Gagal mengambil data sekolah."}), 500
+
 # --- FUNGSI UNTUK KELAS ---
 @bp.route('/kelas', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Admin', 'Guru']) # <-- Lebih baik batasi hanya untuk Admin dan Guru
 def tambah_kelas():
     data = request.get_json()
     if not data or not all(k in data for k in ['nama_kelas', 'jenjang', 'mata_pelajaran', 'tahun_ajaran']):
-        return jsonify({'message': 'Data yang dikirim tidak lengkap'}), 400
-    
+        return jsonify({'message': 'Data input tidak lengkap.'}), 400
+
+    # 1. Dapatkan data lengkap user yang sedang login
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+
+    # 2. Validasi bahwa user terhubung ke sebuah sekolah
+    if not current_user.sekolah_id:
+        return jsonify({'message': 'Gagal: Pengguna tidak terhubung dengan sekolah manapun.'}), 400
+
+    # 3. Buat objek Kelas baru dengan menyertakan id pemilik dan sekolah
     kelas_baru = Kelas(
         nama_kelas=data['nama_kelas'],
         jenjang=data['jenjang'],
         mata_pelajaran=data['mata_pelajaran'],
-        tahun_ajaran=data['tahun_ajaran']
+        tahun_ajaran=data['tahun_ajaran'],
+        user_id=current_user.id,             # <-- ID pemilik ditambahkan
+        sekolah_id=current_user.sekolah_id   # <-- ID sekolah ditambahkan
     )
+    
     db.session.add(kelas_baru)
     db.session.commit()
-    return jsonify({'message': 'Kelas baru berhasil ditambahkan!', 'id': kelas_baru.id}), 201
+    
+    return jsonify({'message': f'Kelas "{kelas_baru.nama_kelas}" berhasil ditambahkan!'}), 201
 
 @bp.route('/kelas', methods=['GET'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_semua_kelas():
+    # Ambil identitas dan data lengkap user yang sedang login
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+
+    # Ambil parameter filter dari request
     search_query = request.args.get('search', None)
     jenjang_filter = request.args.get('jenjang', None)
-    mata_pelajaran_filter = request.args.get('mata_pelajaran', None)
+    mata_pelajaran_filter = request.args.get('mapel', None)
 
+    # Panggil metode yang sudah kita perbaiki, dengan menyertakan info user
     semua_kelas = Kelas.get_filtered_classes(
         search_query=search_query,
         jenjang_filter=jenjang_filter,
-        mata_pelajaran_filter=mata_pelajaran_filter
+        mata_pelajaran_filter=mata_pelajaran_filter,
+        user=current_user  # <-- Di sini logika hak akses diterapkan
     )
+
+    # Ubah hasil query menjadi format JSON
+    hasil = [{
+        'id': k.id,
+        'nama_kelas': k.nama_kelas,
+        'jenjang': k.jenjang,
+        'mata_pelajaran': k.mata_pelajaran,
+        'tahun_ajaran': k.tahun_ajaran,
+        'jumlah_siswa': len(k.siswa),
+        # Tambahkan info pembuat untuk referensi di frontend
+        'dibuat_oleh': k.pembuat.nama_lengkap if k.pembuat else 'N/A',
+        'nama_sekolah': k.sekolah.nama_sekolah if k.sekolah else 'N/A'
+    } for k in semua_kelas]
     
-    hasil = []
-    for kelas in semua_kelas:
-        jumlah_siswa_di_kelas = len(kelas.siswa)
-        data_kelas = {
-            'id': kelas.id,
-            'nama_kelas': kelas.nama_kelas,
-            'jenjang': kelas.jenjang,
-            'mata_pelajaran': kelas.mata_pelajaran,
-            'tahun_ajaran': kelas.tahun_ajaran,
-            'jumlah_siswa': jumlah_siswa_di_kelas
-        }
-        hasil.append(data_kelas)
     return jsonify(hasil)
 
 
@@ -231,7 +295,26 @@ def lihat_siswa_di_kelas(id_kelas):
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def get_total_students_count():
-    total_students = db.session.query(Siswa).count()
+    """Menghitung jumlah siswa berdasarkan hak akses pengguna."""
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+
+    query = db.session.query(Siswa)
+
+    if current_user.role == UserRole.GURU:
+        # Guru hanya menghitung siswa di kelas yang ia ajar
+        query = query.join(kelas_siswa).join(Kelas).filter(Kelas.user_id == current_user.id)
+    
+    elif current_user.role == UserRole.ADMIN:
+        if not current_user.sekolah_id:
+            return jsonify({'total_students': 0}) # Admin tanpa sekolah tidak punya siswa
+        # Admin menghitung semua siswa di sekolahnya.
+        # Ini mengasumsikan siswa terhubung ke sekolah melalui kelas.
+        query = query.join(kelas_siswa).join(Kelas).filter(Kelas.sekolah_id == current_user.sekolah_id)
+        
+    # Untuk Super User, tidak ada filter, hitung semua siswa
+    
+    total_students = query.count()
     return jsonify({'total_students': total_students}), 200
 
 # --- FUNGSI UNTUK BULK IMPORT SISWA ---
