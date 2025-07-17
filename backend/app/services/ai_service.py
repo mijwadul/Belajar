@@ -36,14 +36,8 @@ class AIService:
                         text += page.extract_text() or ""
             elif extension.lower() in ['.png', '.jpg', '.jpeg', '.bmp', '.tiff']:
                 text = pytesseract.image_to_string(Image.open(file_path))
-            # Tambahkan dukungan untuk .docx jika diperlukan dengan library python-docx
-            # elif extension.lower() == '.docx':
-            #     doc = docx.Document(file_path)
-            #     for para in doc.paragraphs:
-            #         text += para.text + '\n'
         except Exception as e:
             current_app.logger.error(f"Gagal mengekstrak teks dari {file_path}: {e}")
-            # Mengembalikan string kosong jika gagal, agar proses tidak berhenti
         return text
 
     def analyze_reference_text(self, combined_text):
@@ -57,12 +51,10 @@ class AIService:
         """
         response_text = self._generate_content([prompt])
         try:
-            # Membersihkan output sebelum parsing JSON
             clean_json_str = response_text.strip().replace('```json', '').replace('```', '').strip()
             return json.loads(clean_json_str)
         except json.JSONDecodeError:
             current_app.logger.error("Gagal mem-parsing JSON dari hasil analisis referensi.")
-            # Fallback jika AI tidak mengembalikan JSON yang valid
             return {"cp": "", "tp": "", "materi_pokok": "", "pertanyaan_pemantik": "", "model_pembelajaran": "", "media_sumber": ""}
 
     def generate_rpp_from_ai(self, rpp_data, file_paths=None):
@@ -81,32 +73,41 @@ class AIService:
         - **Topik Utama**: {rpp_data.get('topik')}
         - **Alokasi Waktu**: {rpp_data.get('alokasi_waktu')}
 
-        ## BAGIAN 2: KONTEKS TAMBAHAN DARI PENGGUNA (JIKA ADA)
-        - **Capaian Pembelajaran**: {rpp_data.get('cp', '')}
-        - **Tujuan Pembelajaran**: {rpp_data.get('tp', '')}
-        - **Materi Pokok**: {rpp_data.get('materi_pokok', '')}
-        - **Pertanyaan Pemantik**: {rpp_data.get('pertanyaan_pemantik', '')}
-        - **Model Pembelajaran**: {rpp_data.get('model_pembelajaran', '')}
-        - **Media & Sumber Belajar**: {rpp_data.get('media_sumber', '')}
-
-        ## BAGIAN 3: MATERI DARI FILE REFERENSI (JIKA ADA)
-        Teks berikut adalah konten dari file yang diunggah. Gunakan sebagai inspirasi atau sumber tambahan, TAPI JANGAN biarkan menimpa **DATA UTAMA** dan **TOPIK UTAMA**.
+        ## BAGIAN 2: MATERI DARI FILE REFERENSI (JIKA ADA)
+        Teks berikut adalah konten dari file yang diunggah oleh pengguna.
         --- AWAL FILE REFERENSI ---
         {referensi_text if referensi_text else "Tidak ada file referensi yang diberikan."}
         --- AKHIR FILE REFERENSI ---
 
         ## TUGAS ANDA:
-        Buatlah RPP yang lengkap dan profesional dalam format **Markdown**.
+        Buatlah RPP yang lengkap, sistematis, dan profesional dalam format **Markdown**.
 
         ## INSTRUKSI KRITIS:
-        1. **PRIORITAS UTAMA**: Seluruh konten RPP harus secara ketat relevan dengan **Topik Utama** dari **DATA UTAMA**.
-        2. **NAMA PENYUSUN**: Wajib mencantumkan nama penyusun di bagian identitas RPP.
-        3. **PENGEMBANGAN KONTEN**: Jika ada kolom di "Konteks Tambahan" yang kosong, kembangkan isinya secara kreatif agar selaras dengan **Topik Utama**.
-        4. **STRUKTUR OUTPUT**: RPP harus memiliki struktur yang jelas, mencakup minimal:
-           - A. Informasi Umum (Identitas)
-           - B. Tujuan Pembelajaran
-           - C. Kegiatan Pembelajaran (Pendahuluan, Inti, Penutup)
-           - D. Asesmen/Penilaian
+        1.  **PRIORITAS UTAMA**: Seluruh konten RPP harus secara ketat relevan dengan **Topik Utama** dari **DATA UTAMA**. Jangan menyimpang dari topik ini.
+        2.  **PENGEMBANGAN KONTEN**: Gunakan kreativitas Anda untuk mengembangkan konten RPP (Tujuan Pembelajaran, Kegiatan Pembelajaran, Asesmen) agar selaras dengan **Topik Utama**.
+        3.  **ENRICHMENT (PENAMBAHAN KOLOM)**: 
+            - **ANALISIS FILE REFERENSI**: Analisis teks dari **BAGIAN 2**.
+            - **TAMBAHKAN JIKA RELEVAN**: Jika Anda menemukan informasi yang relevan dengan **Topik Utama** untuk kolom-kolom seperti **"Profil Pelajar Pancasila"**, **"Sarana dan Prasarana"**, **"Kompetensi Awal"**, atau **"Pemahaman Bermakna"**, maka **TAMBAHKAN kolom-kolom tersebut** ke dalam RPP yang Anda hasilkan.
+            - **JANGAN TAMBAHKAN JIKA TIDAK RELEVAN**: Jika informasi tersebut tidak ada atau tidak relevan, jangan paksakan untuk menambahkannya.
+        4.  **STRUKTUR OUTPUT**: RPP harus memiliki struktur yang jelas, mencakup minimal:
+            - A. Informasi Umum (Identitas, Nama Penyusun, Kompetensi Awal, dll.)
+            - B. Komponen Inti (Tujuan Pembelajaran, Pemahaman Bermakna, Pertanyaan Pemantik)
+            - C. Kegiatan Pembelajaran (Pendahuluan, Inti, Penutup)
+            - D. Asesmen/Penilaian
+            - E. Lampiran (jika perlu)
+        """
+        return self._generate_content([prompt])
+
+    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, taksonomi_bloom_level):
+        prompt = f"""
+        Anda adalah AI ahli dalam membuat soal evaluasi pendidikan.
+        Berdasarkan materi di bawah ini, buatlah {jumlah_soal} soal jenis '{jenis_soal}' dengan tingkat kesulitan Taksonomi Bloom '{taksonomi_bloom_level}'.
+        Format output HARUS berupa JSON string tunggal.
+        - Untuk Pilihan Ganda: array objek dengan kunci "pertanyaan", "pilihan" (objek A, B, C, D), "jawaban_benar" (kunci dari pilihan).
+        - Untuk Esai: array objek dengan kunci "pertanyaan" dan "jawaban_ideal".
+
+        --- MATERI ---
+        {sumber_materi}
         """
         return self._generate_content([prompt])
 
