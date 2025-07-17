@@ -4,8 +4,8 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 
 const useAuth = () => {
-  // Cek apakah ada token di localStorage
-  const token = localStorage.getItem('token');
+  // Cek apakah ada token di localStorage dengan nama yang benar
+  const token = localStorage.getItem('access_token'); // <-- PERBAIKAN DI SINI
   return !!token; // Mengembalikan true jika token ada, false jika tidak
 };
 
