@@ -22,15 +22,15 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    MenuItem, // Untuk Dropdown Kelas
-    FormControl, // Untuk Dropdown Kelas
-    InputLabel, // Untuk Dropdown Kelas
-    Select // Untuk Dropdown Kelas
+    MenuItem,
+    FormControl,
+    InputLabel,
+    Select
 } from '@mui/material';
 import { Edit, Delete, Download, Visibility, Add, Search } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getAllRpps, deleteRpp, updateRpp, getRppById, downloadRppPdf } from '../api/aiService';
-import { getAllKelas } from '../api/classroomService'; // Pastikan ini ada atau tambahkan di classroomService.js
+import { getAllKelas } from '../api/classroomService';
 
 const RppLibraryPage = () => {
     const navigate = useNavigate();
@@ -45,7 +45,7 @@ const RppLibraryPage = () => {
     const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
     const [currentRpp, setCurrentRpp] = useState(null);
     const [editForm, setEditForm] = useState({ judul: '', kelas_id: '' });
-    const [kelasList, setKelasList] = useState([]); // State untuk daftar kelas
+    const [kelasList, setKelasList] = useState([]);
 
     useEffect(() => {
         fetchRppsAndKelas();
@@ -57,7 +57,7 @@ const RppLibraryPage = () => {
         try {
             const [rppsData, kelasData] = await Promise.all([
                 getAllRpps(),
-                getAllKelas() // Ambil daftar kelas
+                getAllKelas()
             ]);
             setRpps(rppsData);
             setKelasList(kelasData);
@@ -87,7 +87,6 @@ const RppLibraryPage = () => {
         rpp.nama_kelas.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // --- Edit RPP Handlers ---
     const handleEditClick = async (rppId) => {
         try {
             const rppDetail = await getRppById(rppId);
@@ -115,19 +114,17 @@ const RppLibraryPage = () => {
         if (!currentRpp) return;
         setLoading(true);
         try {
-            // Kita hanya akan mengizinkan edit judul dan kelas_id dari sini.
-            // Konten markdown RPP sebaiknya diubah melalui generator RPP.
             const updatedData = {
                 judul: editForm.judul,
                 kelas_id: editForm.kelas_id,
-                konten_markdown: currentRpp.konten_markdown // Pertahankan konten markdown asli
+                konten_markdown: currentRpp.konten_markdown
             };
             await updateRpp(currentRpp.id, updatedData);
             setSnackbarMessage('RPP berhasil diperbarui!');
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
             handleEditDialogClose();
-            fetchRppsAndKelas(); // Refresh daftar RPP
+            fetchRppsAndKelas();
         } catch (err) {
             setSnackbarMessage(`Gagal memperbarui RPP: ${err.message}`);
             setSnackbarSeverity('error');
@@ -137,7 +134,6 @@ const RppLibraryPage = () => {
         }
     };
 
-    // --- Delete RPP Handlers ---
     const handleDeleteClick = (rppId) => {
         setCurrentRpp(rpps.find(r => r.id === rppId));
         setOpenDeleteDialog(true);
@@ -157,7 +153,7 @@ const RppLibraryPage = () => {
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
             handleDeleteDialogClose();
-            fetchRppsAndKelas(); // Refresh daftar RPP
+            fetchRppsAndKelas();
         } catch (err) {
             setSnackbarMessage(`Gagal menghapus RPP: ${err.message}`);
             setSnackbarSeverity('error');
@@ -167,7 +163,6 @@ const RppLibraryPage = () => {
         }
     };
 
-    // --- Download RPP PDF Handler ---
     const handleDownloadPdf = async (rppId, rppTitle) => {
         setLoading(true);
         try {
@@ -205,11 +200,12 @@ const RppLibraryPage = () => {
                         ),
                     }}
                 />
+                {/* --- PERBAIKAN DI SINI --- */}
                 <Button
                     variant="contained"
                     color="primary"
                     startIcon={<Add />}
-                    onClick={() => navigate('/rpp-generator')}
+                    onClick={() => navigate('/generator-rpp')} // Path URL diperbaiki
                 >
                     Buat RPP Baru
                 </Button>

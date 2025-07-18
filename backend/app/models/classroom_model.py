@@ -67,7 +67,6 @@ class Kelas(db.Model):
     # Fungsi get_filtered_classes akan kita sesuaikan nanti di logic API
     
 class Siswa(db.Model):
-    # Tidak ada perubahan pada model Siswa
     __tablename__ = 'siswa'
     id = db.Column(db.Integer, primary_key=True)
     nama_lengkap = db.Column(db.String(150), nullable=False)
@@ -85,6 +84,25 @@ class Siswa(db.Model):
 
     def __repr__(self):
         return f'<Siswa {self.nama_lengkap}>'
+
+    # --- METODE YANG HILANG DITAMBAHKAN KEMBALI DENGAN LOGIKA BARU ---
+    @classmethod
+    def get_filtered_students_in_class(cls, kelas_id, search_query=None, jenis_kelamin_filter=None, agama_filter=None):
+        """
+        Mengambil daftar siswa untuk kelas tertentu dengan kemampuan pencarian dan filter.
+        """
+        query = cls.query.join(kelas_siswa).join(Kelas).filter(Kelas.id == kelas_id)
+
+        if search_query:
+            query = query.filter(cls.nama_lengkap.ilike(f'%{search_query}%'))
+        
+        if jenis_kelamin_filter:
+            query = query.filter(cls.jenis_kelamin == jenis_kelamin_filter)
+
+        if agama_filter:
+            query = query.filter(cls.agama == agama_filter)
+
+        return query.order_by(cls.nama_lengkap).all()
 
 class Absensi(db.Model):
     # Tidak ada perubahan pada model Absensi

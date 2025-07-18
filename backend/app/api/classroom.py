@@ -259,19 +259,30 @@ def daftarkan_siswa(id_kelas):
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
 def lihat_siswa_di_kelas(id_kelas):
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
     kelas = Kelas.query.get_or_404(id_kelas)
 
+    # --- VALIDASI HAK AKSES (Tetap ada untuk keamanan) ---
+    if current_user.role == UserRole.GURU and kelas.user_id != current_user.id:
+        return jsonify({'message': 'Akses ditolak: Anda hanya bisa melihat siswa di kelas Anda sendiri.'}), 403
+    if current_user.role == UserRole.ADMIN and kelas.sekolah_id != current_user.sekolah_id:
+        return jsonify({'message': 'Akses ditolak: Anda hanya bisa melihat siswa di sekolah Anda.'}), 403
+    
+    # Ambil parameter filter dari URL
     search_query = request.args.get('search', None)
     jenis_kelamin_filter = request.args.get('jenis_kelamin', None)
     agama_filter = request.args.get('agama', None)
 
+    # Panggil metode yang sudah kita perbaiki
     siswa_di_kelas = Siswa.get_filtered_students_in_class(
         kelas_id=id_kelas,
         search_query=search_query,
         jenis_kelamin_filter=jenis_kelamin_filter,
         agama_filter=agama_filter
     )
-    
+
+    # --- BAGIAN INI SAYA LENGKAPI SESUAI KODE ASLI ANDA ---
     hasil_siswa = []
     for siswa_obj in siswa_di_kelas:
         hasil_siswa.append({
@@ -280,7 +291,7 @@ def lihat_siswa_di_kelas(id_kelas):
             'nis': siswa_obj.nis,
             'nisn': siswa_obj.nisn,
             'tempat_lahir': siswa_obj.tempat_lahir,
-            'tanggal_lahir': siswa_obj.tanggal_lahir.strftime('%d %b %Y') if siswa_obj.tanggal_lahir else None,
+            'tanggal_lahir': siswa_obj.tanggal_lahir.strftime('%d %B %Y') if siswa_obj.tanggal_lahir else None,
             'jenis_kelamin': siswa_obj.jenis_kelamin,
             'agama': siswa_obj.agama,
             'alamat': siswa_obj.alamat,

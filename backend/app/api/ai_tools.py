@@ -10,7 +10,7 @@ import random
 
 from flask import Blueprint, request, jsonify, current_app, send_file, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import RPP, Soal, Ujian, Kelas, User
+from ..models import RPP, Soal, Ujian, Kelas, User, UserRole
 from .. import db
 from app.services.ai_service import AIService
 from app.api.auth import roles_required
@@ -88,7 +88,7 @@ def analyze_referensi_endpoint():
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-
+# 3. Endpoint untuk Generate RPP
 @bp.route('/generate-rpp', methods=['POST'])
 @jwt_required()
 @roles_required(['Admin', 'Guru', 'Super User'])
@@ -138,17 +138,25 @@ def generate_rpp_endpoint():
 
 @bp.route('/rpp', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Guru'])
 def simpan_rpp():
     data = request.get_json()
     if not data or not all(k in data for k in ['judul', 'konten_markdown', 'kelas_id']):
         return jsonify({'message': 'Data tidak lengkap'}), 400
     
-    Kelas.query.get_or_404(data['kelas_id'])
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+    kelas = Kelas.query.get_or_404(data['kelas_id'])
+
+    if kelas.user_id != current_user.id:
+        return jsonify({'message': 'Akses ditolak: Anda hanya dapat membuat RPP untuk kelas Anda sendiri.'}), 403
+
     rpp_baru = RPP(
         judul=data['judul'],
         konten_markdown=data['konten_markdown'],
-        kelas_id=data['kelas_id']
+        kelas_id=data['kelas_id'],
+        user_id=current_user.id,
+        sekolah_id=current_user.sekolah_id
     )
     db.session.add(rpp_baru)
     db.session.commit()
@@ -156,9 +164,19 @@ def simpan_rpp():
 
 @bp.route('/rpp', methods=['GET'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Super User', 'Guru', 'Admin'])
 def lihat_semua_rpp():
-    semua_rpp = RPP.query.order_by(RPP.tanggal_dibuat.desc()).all()
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+
+    if current_user.role == UserRole.ADMIN:
+        return jsonify([])
+    elif current_user.role == UserRole.GURU:
+        query = RPP.query.filter_by(user_id=current_user.id)
+    else: # Super User
+        query = RPP.query
+
+    semua_rpp = query.order_by(RPP.tanggal_dibuat.desc()).all()
     hasil = [{
         'id': rpp.id,
         'judul': rpp.judul,
@@ -168,12 +186,19 @@ def lihat_semua_rpp():
     } for rpp in semua_rpp]
     return jsonify(hasil)
 
-
 @bp.route('/rpp/<int:id_rpp>', methods=['GET'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Super User', 'Guru', 'Admin'])
 def lihat_satu_rpp(id_rpp):
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
     rpp = RPP.query.get_or_404(id_rpp)
+
+    if current_user.role == UserRole.ADMIN:
+        return jsonify({'message': 'Akses ditolak'}), 403
+    if current_user.role == UserRole.GURU and rpp.user_id != current_user.id:
+        return jsonify({'message': 'Anda tidak memiliki hak untuk melihat RPP ini.'}), 403
+
     return jsonify({
         'id': rpp.id,
         'judul': rpp.judul,
@@ -184,11 +209,16 @@ def lihat_satu_rpp(id_rpp):
     
 @bp.route('/rpp/<int:id_rpp>', methods=['PUT'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Guru'])
 def update_rpp(id_rpp):
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
     rpp = RPP.query.get_or_404(id_rpp)
-    data = request.get_json()
 
+    if rpp.user_id != current_user.id:
+        return jsonify({'message': 'Anda tidak memiliki hak untuk mengubah RPP ini.'}), 403
+
+    data = request.get_json()
     rpp.judul = data.get('judul', rpp.judul)
     rpp.kelas_id = data.get('kelas_id', rpp.kelas_id)
     rpp.konten_markdown = data.get('konten_markdown', rpp.konten_markdown)
@@ -198,9 +228,15 @@ def update_rpp(id_rpp):
 
 @bp.route('/rpp/<int:id_rpp>', methods=['DELETE'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Super User', 'Guru'])
 def delete_rpp(id_rpp):
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
     rpp = RPP.query.get_or_404(id_rpp)
+
+    if current_user.role == UserRole.GURU and rpp.user_id != current_user.id:
+        return jsonify({'message': 'Anda tidak memiliki hak untuk menghapus RPP ini.'}), 403
+    
     try:
         db.session.delete(rpp)
         db.session.commit()
@@ -210,17 +246,24 @@ def delete_rpp(id_rpp):
         current_app.logger.error(f"Error saat menghapus RPP: {e}", exc_info=True)
         return jsonify({'message': 'Gagal menghapus RPP.'}), 500
 
+# 4. Endpoint untuk Generate Soal
 @bp.route('/generate-soal', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Guru']) # Hanya Guru yang bisa generate soal
 def generate_soal_endpoint():
-    ai_service = get_ai_service() # <--- Gunakan fungsi ini
     data = request.get_json()
-    if not data or not all(k in data for k in ['rpp_id', 'jenis_soal', 'jumlah_soal', 'taksonomi_bloom_level']):
-        return jsonify({'message': 'Data input tidak lengkap.'}), 400
+    if not data or not data.get('rpp_id'):
+        return jsonify({'message': 'ID RPP wajib disertakan.'}), 400
 
+    user_id = get_jwt_identity()
     rpp = RPP.query.get_or_404(data['rpp_id'])
+
+    # Validasi: Guru hanya bisa generate soal dari RPP miliknya
+    if rpp.user_id != user_id:
+        return jsonify({'message': 'Akses ditolak: Anda hanya dapat membuat soal dari RPP Anda sendiri.'}), 403
+
     try:
+        ai_service = get_ai_service()
         hasil_soal_json_str = ai_service.generate_soal_from_ai(
             sumber_materi=rpp.konten_markdown,
             jenis_soal=data['jenis_soal'],
@@ -232,48 +275,74 @@ def generate_soal_endpoint():
         current_app.logger.error(f"Error saat memanggil AI untuk soal: {e}", exc_info=True)
         return jsonify({'message': f'Terjadi kesalahan internal: {e}'}), 500
 
-# (Endpoint lainnya seperti simpan_soal, lihat_semua_soal, dll tetap sama)
 
-# ... [PASTIKAN SEMUA FUNGSI ENDPOINT LAINNYA JUGA SAMA] ...
 @bp.route('/soal', methods=['POST'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Guru']) # Hanya Guru yang bisa menyimpan soal
 def simpan_soal():
     data = request.get_json()
     if not data or not all(k in data for k in ['judul', 'konten_json', 'rpp_id']):
         return jsonify({'message': 'Data tidak lengkap'}), 400
-    
-    RPP.query.get_or_404(data['rpp_id'])
+
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+    rpp = RPP.query.get_or_404(data['rpp_id'])
+
+    # Validasi: Guru hanya bisa menyimpan soal yang terhubung ke RPP miliknya
+    if rpp.user_id != current_user.id:
+        return jsonify({'message': 'Akses ditolak: Soal harus terhubung dengan RPP Anda sendiri.'}), 403
+
     soal_baru = Soal(
         judul=data['judul'],
         konten_json=json.dumps(data['konten_json']),
-        rpp_id=data['rpp_id']
+        rpp_id=data['rpp_id'],
+        user_id=current_user.id,
+        sekolah_id=current_user.sekolah_id
     )
     db.session.add(soal_baru)
     db.session.commit()
     return jsonify({'message': f'Set soal "{soal_baru.judul}" berhasil disimpan!'}), 201
 
+
 @bp.route('/soal', methods=['GET'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Super User', 'Guru', 'Admin'])
 def lihat_semua_soal():
-    semua_soal = Soal.query.order_by(Soal.tanggal_dibuat.desc()).all()
-    hasil = []
-    for soal_set in semua_soal:
-        hasil.append({
-            'id': soal_set.id,
-            'judul': soal_set.judul,
-            'tanggal_dibuat': soal_set.tanggal_dibuat.strftime('%d %B %Y'),
-            'judul_rpp': soal_set.rpp.judul
-        })
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
+
+    if current_user.role == UserRole.ADMIN:
+        return jsonify([]) # Admin tidak bisa melihat soal
+    elif current_user.role == UserRole.GURU:
+        query = Soal.query.filter_by(user_id=current_user.id)
+    else: # Super User
+        query = Soal.query
+
+    semua_soal = query.order_by(Soal.tanggal_dibuat.desc()).all()
+    hasil = [{
+        'id': soal_set.id,
+        'judul': soal_set.judul,
+        'tanggal_dibuat': soal_set.tanggal_dibuat.strftime('%d %B %Y'),
+        'judul_rpp': soal_set.rpp.judul
+    } for soal_set in semua_soal]
     return jsonify(hasil)
+
 
 @bp.route('/soal/<int:id_soal>', methods=['GET', 'DELETE'])
 @jwt_required()
-@roles_required(['Admin', 'Guru', 'Super User'])
+@roles_required(['Super User', 'Guru', 'Admin'])
 def kelola_satu_soal(id_soal):
+    user_id = get_jwt_identity()
+    current_user = User.query.get_or_404(user_id)
     soal_set = Soal.query.get_or_404(id_soal)
 
+    # Validasi kepemilikan atau peran
+    if current_user.role == UserRole.ADMIN:
+        return jsonify({'message': 'Akses ditolak'}), 403
+    if current_user.role == UserRole.GURU and soal_set.user_id != current_user.id:
+        return jsonify({'message': 'Anda tidak memiliki hak untuk mengakses set soal ini.'}), 403
+
+    # Logika untuk GET
     if request.method == 'GET':
         konten = json.loads(soal_set.konten_json)
         return jsonify({
@@ -283,6 +352,8 @@ def kelola_satu_soal(id_soal):
             'judul_rpp': soal_set.rpp.judul,
             'rpp_id': soal_set.rpp_id
         })
+    
+    # Logika untuk DELETE
     elif request.method == 'DELETE':
         try:
             db.session.delete(soal_set)
@@ -290,8 +361,8 @@ def kelola_satu_soal(id_soal):
             return jsonify({'message': f'Set soal "{soal_set.judul}" berhasil dihapus!'}), 200
         except Exception as e:
             db.session.rollback()
-            print(f"Error deleting soal set: {e}")
-            return jsonify({'message': 'Gagal menghapus set soal.', 'details': str(e)}), 500
+            current_app.logger.error(f"Error deleting soal set: {e}", exc_info=True)
+            return jsonify({'message': 'Gagal menghapus set soal.'}), 500
 
 @bp.route('/generate-exam-pdf', methods=['POST'])
 @jwt_required()
