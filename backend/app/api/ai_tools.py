@@ -245,6 +245,76 @@ def delete_rpp(id_rpp):
         db.session.rollback()
         current_app.logger.error(f"Error saat menghapus RPP: {e}", exc_info=True)
         return jsonify({'message': 'Gagal menghapus RPP.'}), 500
+    
+@bp.route('/rpp/<int:id_rpp>/download-pdf', methods=['GET'])
+@jwt_required()
+@roles_required(['Super User', 'Guru', 'Admin'])
+def download_rpp_pdf(id_rpp):
+    """Endpoint untuk men-download RPP sebagai file PDF dengan pemformatan Markdown."""
+    user_id = int(get_jwt_identity())
+    current_user = User.query.get_or_404(user_id)
+    rpp = RPP.query.get_or_404(id_rpp)
+
+    # Terapkan logika hak akses
+    if current_user.role == UserRole.ADMIN:
+        return jsonify({'message': 'Akses ditolak'}), 403
+    if current_user.role == UserRole.GURU and rpp.user_id != current_user.id:
+        return jsonify({'message': 'Anda tidak memiliki hak untuk mengunduh RPP ini.'}), 403
+
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                rightMargin=inch, leftMargin=inch,
+                                topMargin=inch, bottomMargin=inch)
+        
+        # --- PENINGKATAN STYLING DIMULAI DI SINI ---
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name='H1', parent=styles['h1'], fontSize=18, leading=22, spaceAfter=12))
+        styles.add(ParagraphStyle(name='H2', parent=styles['h2'], fontSize=16, leading=20, spaceAfter=10))
+        styles.add(ParagraphStyle(name='H3', parent=styles['h3'], fontSize=14, leading=18, spaceAfter=8))
+        styles.add(ParagraphStyle(name='Body', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=6, leading=14))
+        styles.add(ParagraphStyle(name='ListItem', parent=styles['Normal'], leftIndent=20, spaceAfter=4, leading=14))
+
+        story = []
+        
+        # Tambahkan judul utama dari RPP
+        story.append(Paragraph(rpp.judul, styles['Title']))
+        story.append(Spacer(1, 0.3 * inch))
+
+        # Parsing konten Markdown baris per baris
+        for line in rpp.konten_markdown.strip().split('\n'):
+            line = line.strip()
+            if line.startswith('### '):
+                story.append(Paragraph(line.replace('### ', ''), styles['H3']))
+            elif line.startswith('## '):
+                story.append(Paragraph(line.replace('## ', ''), styles['H2']))
+            elif line.startswith('# '):
+                story.append(Paragraph(line.replace('# ', ''), styles['H1']))
+            elif line.startswith('* '):
+                # Menambahkan simbol bullet point untuk daftar
+                formatted_line = f"• {line.replace('* ', '')}"
+                story.append(Paragraph(formatted_line, styles['ListItem']))
+            elif line: # Jika baris tidak kosong
+                story.append(Paragraph(line, styles['Body']))
+            else: # Jika baris kosong, tambahkan spasi
+                story.append(Spacer(1, 0.1 * inch))
+
+        doc.build(story)
+        # --- AKHIR PENINGKATAN STYLING ---
+
+        buffer.seek(0)
+        safe_filename = "".join([c for c in rpp.judul if c.isalpha() or c.isdigit() or c in (' ', '-')]).rstrip()
+        
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=f'{safe_filename}.pdf',
+            mimetype='application/pdf'
+        )
+
+    except Exception as e:
+        current_app.logger.error(f"Gagal membuat RPP PDF: {e}", exc_info=True)
+        return jsonify({'message': 'Terjadi kesalahan saat membuat file PDF.'}), 500
 
 # 4. Endpoint untuk Generate Soal
 @bp.route('/generate-soal', methods=['POST'])

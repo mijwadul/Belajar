@@ -144,37 +144,44 @@ export const deleteRpp = async (idRpp) => {
     }
 };
 
-export const downloadRppPdf = async (idRpp, rppTitle) => {
+export const downloadRppPdf = async (rppId, rppTitle) => {
     try {
-        const response = await fetch(`${API_URL}/rpp/${idRpp}/pdf`, {
+        const response = await fetch(`${API_URL}/rpp/${rppId}/download-pdf`, {
             method: 'GET',
             headers: {
-                'Authorization': getAuthHeader()
-            }
+                'Authorization': getAuthHeader(),
+            },
         });
 
         if (!response.ok) {
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `Gagal mengunduh RPP PDF.`);
-            } else {
-                throw new Error(`Gagal mengunduh RPP PDF. Status: ${response.status}`);
-            }
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Gagal mengunduh file.');
         }
 
+        // Mengambil blob (binary large object) dari respons
         const blob = await response.blob();
+        
+        // Membuat URL sementara untuk file blob
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${rppTitle.replace(/[^a-z0-9]/gi, '_') || 'RPP'}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        
+        // Membuat elemen link tersembunyi untuk memicu unduhan
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Membersihkan nama file dari karakter yang tidak valid
+        const safeFilename = rppTitle.replace(/[^a-z0-9-_\s]/gi, '_').replace(/ /g, '_');
+        link.setAttribute('download', `${safeFilename}.pdf`);
+        
+        // Menambahkan link ke body, mengkliknya, lalu menghapusnya
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+        
+        // Melepaskan URL objek setelah selesai
         window.URL.revokeObjectURL(url);
-        return { message: 'RPP PDF berhasil diunduh!' };
+
     } catch (error) {
-        console.error("Error downloading RPP PDF:", error);
+        console.error("Download PDF error:", error);
         throw error;
     }
 };
