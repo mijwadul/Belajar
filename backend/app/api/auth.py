@@ -156,6 +156,8 @@ def get_user(user_id):
 @roles_required(['Admin', 'Super User'])
 def update_user(user_id):
     """Endpoint untuk memperbarui data pengguna."""
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(int(current_user_id))
     user_to_update = User.query.get_or_404(user_id)
     data = request.get_json()
     user_to_update = User.query.get_or_404(user_id)

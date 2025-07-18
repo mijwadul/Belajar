@@ -2,11 +2,12 @@
 
 import json
 import os
-import uuid
 import tempfile
 import shutil
 import io
 import random
+import re
+import markdown2
 
 from flask import Blueprint, request, jsonify, current_app, send_file, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -15,7 +16,6 @@ from .. import db
 from app.services.ai_service import AIService
 from app.api.auth import roles_required
 
-import PyPDF2
 from PIL import Image
 import pytesseract
 from reportlab.lib.pagesizes import A4
@@ -25,8 +25,6 @@ from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
 from reportlab.lib.units import inch
 
 bp = Blueprint('ai_api', __name__, url_prefix='/api')
-
-# --- PERBAIKAN DIMULAI DI SINI ---
 
 # 1. Fungsi Bantuan untuk mendapatkan instance AIService
 def get_ai_service():
@@ -166,7 +164,7 @@ def simpan_rpp():
 @jwt_required()
 @roles_required(['Super User', 'Guru', 'Admin'])
 def lihat_semua_rpp():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     current_user = User.query.get_or_404(user_id)
 
     if current_user.role == UserRole.ADMIN:
@@ -177,13 +175,16 @@ def lihat_semua_rpp():
         query = RPP.query
 
     semua_rpp = query.order_by(RPP.tanggal_dibuat.desc()).all()
+    
     hasil = [{
         'id': rpp.id,
         'judul': rpp.judul,
         'tanggal_dibuat': rpp.tanggal_dibuat.strftime('%d %B %Y'),
         'nama_kelas': rpp.kelas.nama_kelas,
-        'kelas_id': rpp.kelas.id
+        'kelas_id': rpp.kelas.id,
+        'nama_sekolah': rpp.sekolah.nama_sekolah if rpp.sekolah else 'N/A' # <-- TAMBAHKAN BARIS INI
     } for rpp in semua_rpp]
+    
     return jsonify(hasil)
 
 @bp.route('/rpp/<int:id_rpp>', methods=['GET'])
@@ -248,16 +249,12 @@ def delete_rpp(id_rpp):
     
 @bp.route('/rpp/<int:id_rpp>/download-pdf', methods=['GET'])
 @jwt_required()
-@roles_required(['Super User', 'Guru', 'Admin'])
+@roles_required(['Super User', 'Guru'])
 def download_rpp_pdf(id_rpp):
-    """Endpoint untuk men-download RPP sebagai file PDF dengan pemformatan Markdown."""
     user_id = int(get_jwt_identity())
     current_user = User.query.get_or_404(user_id)
     rpp = RPP.query.get_or_404(id_rpp)
 
-    # Terapkan logika hak akses
-    if current_user.role == UserRole.ADMIN:
-        return jsonify({'message': 'Akses ditolak'}), 403
     if current_user.role == UserRole.GURU and rpp.user_id != current_user.id:
         return jsonify({'message': 'Anda tidak memiliki hak untuk mengunduh RPP ini.'}), 403
 
@@ -267,54 +264,93 @@ def download_rpp_pdf(id_rpp):
                                 rightMargin=inch, leftMargin=inch,
                                 topMargin=inch, bottomMargin=inch)
         
-        # --- PENINGKATAN STYLING DIMULAI DI SINI ---
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='H1', parent=styles['h1'], fontSize=18, leading=22, spaceAfter=12))
-        styles.add(ParagraphStyle(name='H2', parent=styles['h2'], fontSize=16, leading=20, spaceAfter=10))
-        styles.add(ParagraphStyle(name='H3', parent=styles['h3'], fontSize=14, leading=18, spaceAfter=8))
-        styles.add(ParagraphStyle(name='Body', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=6, leading=14))
-        styles.add(ParagraphStyle(name='ListItem', parent=styles['Normal'], leftIndent=20, spaceAfter=4, leading=14))
+        styles.add(ParagraphStyle(name='H1', parent=styles['h1'], fontSize=14, leading=18, spaceBefore=12, spaceAfter=6, alignment=TA_LEFT))
+        styles.add(ParagraphStyle(name='H2', parent=styles['h2'], fontSize=12, leading=16, spaceBefore=10, spaceAfter=5, alignment=TA_LEFT))
+        styles.add(ParagraphStyle(name='Body', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=10, leading=14))
+        styles.add(ParagraphStyle(name='ListItem', parent=styles['Normal'], leftIndent=20, spaceAfter=2, leading=14, bulletIndent=0))
 
         story = []
-        
-        # Tambahkan judul utama dari RPP
         story.append(Paragraph(rpp.judul, styles['Title']))
-        story.append(Spacer(1, 0.3 * inch))
+        story.append(Spacer(1, 0.2 * inch))
+        
+        paragraph_buffer = []
 
-        # Parsing konten Markdown baris per baris
+        def close_unclosed_b_tags(text):
+            # Count <b> and </b>
+            open_count = text.count('<b>')
+            close_count = text.count('</b>')
+            if open_count > close_count:
+                text += '</b>' * (open_count - close_count)
+            elif close_count > open_count:
+                # Remove excess closing tags
+                text = text.replace('</b>', '', close_count - open_count)
+            return text
+
+        def escape_stray_angle_brackets(text):
+            # Only allow <b> and </b>, escape others
+            text = re.sub(r'<(?!/?b>)', '&lt;', text)
+            text = re.sub(r'(?<!<b)(?<!</b)>', '&gt;', text)
+            return text
+
+        def process_buffer(story_list, buffer_list):
+            if buffer_list:
+                full_paragraph = " ".join(buffer_list)
+                # Ganti **...** dengan <b>...</b> di dalam paragraf yang sudah digabung
+                full_paragraph = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', full_paragraph)
+                full_paragraph = close_unclosed_b_tags(full_paragraph)
+                full_paragraph = escape_stray_angle_brackets(full_paragraph)
+                story_list.append(Paragraph(full_paragraph, styles['Body']))
+                buffer_list.clear()
+
+
         for line in rpp.konten_markdown.strip().split('\n'):
-            line = line.strip()
-            if line.startswith('### '):
-                story.append(Paragraph(line.replace('### ', ''), styles['H3']))
-            elif line.startswith('## '):
-                story.append(Paragraph(line.replace('## ', ''), styles['H2']))
-            elif line.startswith('# '):
-                story.append(Paragraph(line.replace('# ', ''), styles['H1']))
-            elif line.startswith('* '):
-                # Menambahkan simbol bullet point untuk daftar
-                formatted_line = f"• {line.replace('* ', '')}"
+            clean_line = line.strip()
+
+            if not clean_line: # Jika baris kosong, proses buffer paragraf
+                process_buffer(story, paragraph_buffer)
+                continue
+
+            # Cek elemen khusus (Judul, Daftar)
+            is_special_element = False
+
+            # Ganti **...** dengan <b>...</b> sebelum diproses lebih lanjut
+            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', clean_line)
+            formatted_line = close_unclosed_b_tags(formatted_line)
+            formatted_line = escape_stray_angle_brackets(formatted_line)
+
+            if clean_line.startswith('# '):
+                process_buffer(story, paragraph_buffer)
+                story.append(Paragraph(formatted_line.replace('# ', ''), styles['H1']))
+                is_special_element = True
+            elif clean_line.startswith('## '):
+                process_buffer(story, paragraph_buffer)
+                story.append(Paragraph(formatted_line.replace('## ', ''), styles['H2']))
+                is_special_element = True
+            elif clean_line.startswith('* ') or clean_line.startswith('• '):
+                process_buffer(story, paragraph_buffer)
+                final_line = f"•&nbsp;&nbsp;{formatted_line.replace('* ', '').replace('• ', '')}"
+                story.append(Paragraph(final_line, styles['ListItem']))
+                is_special_element = True
+            elif re.match(r'^\d+\.\s+', clean_line):
+                process_buffer(story, paragraph_buffer)
                 story.append(Paragraph(formatted_line, styles['ListItem']))
-            elif line: # Jika baris tidak kosong
-                story.append(Paragraph(line, styles['Body']))
-            else: # Jika baris kosong, tambahkan spasi
-                story.append(Spacer(1, 0.1 * inch))
+                is_special_element = True
+
+            if not is_special_element:
+                paragraph_buffer.append(clean_line)
+
+        process_buffer(story, paragraph_buffer) # Proses sisa buffer di akhir file
 
         doc.build(story)
-        # --- AKHIR PENINGKATAN STYLING ---
-
         buffer.seek(0)
         safe_filename = "".join([c for c in rpp.judul if c.isalpha() or c.isdigit() or c in (' ', '-')]).rstrip()
         
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=f'{safe_filename}.pdf',
-            mimetype='application/pdf'
-        )
+        return send_file(buffer, as_attachment=True, download_name=f'{safe_filename}.pdf', mimetype='application/pdf')
 
     except Exception as e:
         current_app.logger.error(f"Gagal membuat RPP PDF: {e}", exc_info=True)
-        return jsonify({'message': 'Terjadi kesalahan saat membuat file PDF.'}), 500
+        return jsonify({'message': f'Terjadi kesalahan saat membuat file PDF: {str(e)}'}), 500
 
 # 4. Endpoint untuk Generate Soal
 @bp.route('/generate-soal', methods=['POST'])

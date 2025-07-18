@@ -233,10 +233,11 @@ const RppLibraryPage = () => {
                     <Table sx={{ minWidth: 650 }} aria-label="simple table">
                         <TableHead>
                             <TableRow>
-                                <TableCell>Judul RPP</TableCell>
-                                <TableCell>Kelas</TableCell>
-                                <TableCell>Tanggal Dibuat</TableCell>
-                                <TableCell align="right">Aksi</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Judul RPP</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Kelas</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Sekolah</TableCell> {/* <-- KOLOM BARU DITAMBAHKAN */}
+                                <TableCell sx={{ fontWeight: 'bold' }}>Tanggal Dibuat</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 'bold' }}>Aksi</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -257,6 +258,7 @@ const RppLibraryPage = () => {
                                         </Button>
                                     </TableCell>
                                     <TableCell>{rpp.nama_kelas}</TableCell>
+                                    <TableCell>{rpp.nama_sekolah || 'N/A'}</TableCell> {/* <-- DATA BARU DITAMPILKAN */}
                                     <TableCell>{rpp.tanggal_dibuat}</TableCell>
                                     <TableCell align="right">
                                         <IconButton
