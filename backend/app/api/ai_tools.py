@@ -361,7 +361,7 @@ def generate_soal_endpoint():
     if not data or not data.get('rpp_id'):
         return jsonify({'message': 'ID RPP wajib disertakan.'}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     rpp = RPP.query.get_or_404(data['rpp_id'])
 
     # Validasi: Guru hanya bisa generate soal dari RPP miliknya
@@ -372,9 +372,9 @@ def generate_soal_endpoint():
         ai_service = get_ai_service()
         hasil_soal_json_str = ai_service.generate_soal_from_ai(
             sumber_materi=rpp.konten_markdown,
-            jenis_soal=data['jenis_soal'],
-            jumlah_soal=data['jumlah_soal'],
-            taksonomi_bloom_level=data['taksonomi_bloom_level']
+            jenis_soal=data.get('jenis_soal'),
+            jumlah_soal=data.get('jumlah_soal'),
+            taksonomi_bloom_level=data.get('taksonomi_bloom_level')
         )
         return jsonify(json.loads(hasil_soal_json_str))
     except Exception as e:
@@ -390,7 +390,7 @@ def simpan_soal():
     if not data or not all(k in data for k in ['judul', 'konten_json', 'rpp_id']):
         return jsonify({'message': 'Data tidak lengkap'}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     current_user = User.query.get_or_404(user_id)
     rpp = RPP.query.get_or_404(data['rpp_id'])
 
@@ -414,7 +414,7 @@ def simpan_soal():
 @jwt_required()
 @roles_required(['Super User', 'Guru', 'Admin'])
 def lihat_semua_soal():
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     current_user = User.query.get_or_404(user_id)
 
     if current_user.role == UserRole.ADMIN:
@@ -438,7 +438,7 @@ def lihat_semua_soal():
 @jwt_required()
 @roles_required(['Super User', 'Guru', 'Admin'])
 def kelola_satu_soal(id_soal):
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     current_user = User.query.get_or_404(user_id)
     soal_set = Soal.query.get_or_404(id_soal)
 
