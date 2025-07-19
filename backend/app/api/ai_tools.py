@@ -355,7 +355,7 @@ def download_rpp_pdf(id_rpp):
 # 4. Endpoint untuk Generate Soal
 @bp.route('/generate-soal', methods=['POST'])
 @jwt_required()
-@roles_required(['Guru']) # Hanya Guru yang bisa generate soal
+@roles_required(['Guru'])
 def generate_soal_endpoint():
     data = request.get_json()
     if not data or not data.get('rpp_id'):
@@ -364,22 +364,46 @@ def generate_soal_endpoint():
     user_id = int(get_jwt_identity())
     rpp = RPP.query.get_or_404(data['rpp_id'])
 
-    # Validasi: Guru hanya bisa generate soal dari RPP miliknya
     if rpp.user_id != user_id:
-        return jsonify({'message': 'Akses ditolak: Anda hanya dapat membuat soal dari RPP Anda sendiri.'}), 403
+        return jsonify({'message': 'Akses ditolak.'}), 403
+
+    sertakan_ilustrasi = data.get('sertakan_ilustrasi', False)
+    jenjang_kelas = rpp.kelas.jenjang if rpp.kelas else 'Umum'
 
     try:
         ai_service = get_ai_service()
+        
         hasil_soal_json_str = ai_service.generate_soal_from_ai(
             sumber_materi=rpp.konten_markdown,
             jenis_soal=data.get('jenis_soal'),
             jumlah_soal=data.get('jumlah_soal'),
-            taksonomi_bloom_level=data.get('taksonomi_bloom_level')
+            jenjang=jenjang_kelas
         )
-        return jsonify(json.loads(hasil_soal_json_str))
+        
+        # --- PERBAIKAN: Logika pembersihan dan parsing yang lebih cerdas ---
+        soal_list = None
+        # Hapus blok kode Markdown jika ada
+        if "```json" in hasil_soal_json_str:
+            clean_str = hasil_soal_json_str.split('```json', 1)[1].rsplit('```', 1)[0]
+        else:
+            clean_str = hasil_soal_json_str
+
+        try:
+            soal_list = json.loads(clean_str.strip())
+        except json.JSONDecodeError:
+            current_app.logger.error(f"AI mengembalikan respons non-JSON bahkan setelah dibersihkan: {clean_str}")
+            return jsonify({'message': 'AI gagal menghasilkan format soal yang valid. Silakan coba lagi.'}), 500
+        # ----------------------------------------------------------------
+
+        if sertakan_ilustrasi and isinstance(soal_list, list):
+            soal_list_with_images = ai_service.search_images_for_soal(soal_list)
+            return jsonify(soal_list_with_images)
+        else:
+            return jsonify(soal_list)
+
     except Exception as e:
-        current_app.logger.error(f"Error saat memanggil AI untuk soal: {e}", exc_info=True)
-        return jsonify({'message': f'Terjadi kesalahan internal: {e}'}), 500
+        current_app.logger.error(f"Error saat generate soal: {e}", exc_info=True)
+        return jsonify({'message': f'Terjadi kesalahan internal: {str(e)}'}), 500
 
 
 @bp.route('/soal', methods=['POST'])

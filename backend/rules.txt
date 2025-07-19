@@ -1,0 +1,47 @@
+Jenjang SD Kelas 1–3 (Fase A)
+Jenis Soal: Konkret dan sederhana, terkait langsung dengan pengalaman sehari-hari.
+Karakteristik:
+
+Bahasa yang digunakan harus lugas dan mudah dimengerti.
+
+Sangat disarankan menggunakan gambar atau visualisasi untuk membantu pemahaman.
+Tingkat Kesulitan: Fokus pada pemahaman konsep dasar (C1 - Mengingat & C2 - Memahami).
+Format Pilihan Ganda:
+
+Jumlah Opsi: 3 pilihan (A, B, C).
+
+Jenjang SD Kelas 4–6 (Fase B)
+Jenis Soal: Mendorong penggunaan logika dan pengamatan awal melalui cerita pendek atau konteks lingkungan sekitar.
+Karakteristik:
+
+Mulai mengenalkan soal yang membutuhkan penalaran sederhana.
+
+Mengajak siswa untuk mengamati fenomena di sekitarnya.
+Tingkat Kesulitan: Mulai bergeser ke arah penerapan (C2 - Memahami & C3 - Menerapkan).
+Format Pilihan Ganda:
+
+Jumlah Opsi: 4 pilihan (A, B, C, D).
+
+Jenjang SMP Kelas 7–9 (Fase D)
+Jenis Soal: Menuntut analisis data atau fenomena aktual untuk mengambil keputusan.
+Karakteristik:
+
+Soal bersifat kontekstual, dapat berbasis data, teks, atau grafik.
+
+Pilihan jawaban (distraktor) dibuat lebih kompleks.
+Tingkat Kesulitan: Fokus pada keterampilan berpikir analitis (C4 - Menganalisis).
+Format Pilihan Ganda:
+
+Jumlah Opsi: 4 pilihan (A, B, C, D).
+
+Jenjang SMA Kelas 10–12 (Fase E–F)
+Jenis Soal: Mendorong pemikiran kritis, evaluasi, dan penciptaan solusi untuk masalah kompleks.
+Karakteristik:
+
+Soal bersifat terbuka, bisa berbasis studi kasus atau proyek.
+
+Pilihan jawaban (distraktor) dibuat lebih halus dan bisa mengandung jebakan logis.
+Tingkat Kesulitan: Fokus pada level kognitif tinggi (C5 - Mengevaluasi & C6 - Mencipta).
+Format Pilihan Ganda:
+
+Jumlah Opsi: 5 pilihan (A, B, C, D, E).

@@ -5,6 +5,7 @@ import pytesseract
 import google.generativeai as genai
 import json
 from flask import current_app
+from googleapiclient.discovery import build
 
 pytesseract.pytesseract.tesseract_cmd = r'D:\Games\Tesseract\tesseract.exe'
 
@@ -16,6 +17,18 @@ class AIService:
         
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(model_name)
+
+        google_api_key = current_app.config.get('GOOGLE_API_KEY')
+        google_cse_id = current_app.config.get('GOOGLE_CSE_ID')
+
+        if google_api_key and google_cse_id:
+            self.search_service = build("customsearch", "v1", developerKey=google_api_key)
+            self.google_cse_id = google_cse_id
+            current_app.logger.info("Google Custom Search API service initialized.")
+        else:
+            self.search_service = None
+            self.google_cse_id = None
+            current_app.logger.warning("Google Custom Search API keys (GOOGLE_API_KEY, GOOGLE_CSE_ID) not found in app config. Image search will be skipped.")
 
     def _generate_content(self, prompt_parts):
         try:
@@ -99,31 +112,74 @@ class AIService:
         """
         return self._generate_content([prompt])
 
-    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, taksonomi_bloom_level):
-        prompt = f"""
-        Anda adalah AI ahli dalam membuat soal evaluasi pendidikan.
-        Berdasarkan materi di bawah ini, buatlah {jumlah_soal} soal jenis '{jenis_soal}' dengan tingkat kesulitan Taksonomi Bloom '{taksonomi_bloom_level}'.
-        Format output HARUS berupa JSON string tunggal.
-        - Untuk Pilihan Ganda: array objek dengan kunci "pertanyaan", "pilihan" (objek A, B, C, D), "jawaban_benar" (kunci dari pilihan).
-        - Untuk Esai: array objek dengan kunci "pertanyaan" dan "jawaban_ideal".
-
-        --- MATERI ---
-        {sumber_materi}
-        """
-        return self._generate_content([prompt])
-
-    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, taksonomi_bloom_level):
-        prompt = f"""
-        Anda adalah AI ahli dalam membuat soal evaluasi pendidikan.
-        Berdasarkan materi di bawah ini, buatlah {jumlah_soal} soal jenis '{jenis_soal}' dengan tingkat kesulitan Taksonomi Bloom '{taksonomi_bloom_level}'.
-
-        Format output HARUS berupa JSON string tunggal, tanpa markdown atau teks tambahan.
-        Struktur JSON harus berupa array dari objek, di mana setiap objek adalah satu soal.
+    def generate_soal_from_ai(self, sumber_materi, jenis_soal, jumlah_soal, jenjang):
         
-        - Untuk Pilihan Ganda, objek harus memiliki kunci: "pertanyaan", "pilihan" (objek dengan A, B, C, D), "jawaban_benar" (kunci dari pilihan, misal "A").
-        - Untuk Esai, objek harus memiliki kunci: "pertanyaan" dan "jawaban_ideal".
+        try:
+            with open("rules.txt", "r", encoding="utf-8") as f:
+                pedoman_soal = f.read()
+        except FileNotFoundError:
+            pedoman_soal = "Pedoman tidak ditemukan. Buat soal berdasarkan praktik terbaik umum."
 
-        --- MATERI ---
+        prompt = f"""
+        Anda adalah seorang ahli pedagogi dan pembuat soal ujian yang sangat berpengalaman.
+        Tugas Anda adalah membuat {jumlah_soal} soal jenis '{jenis_soal}'.
+
+        **PEDOMAN WAJIB PEMBUATAN SOAL:**
+        Anda **HARUS** mengikuti pedoman di bawah ini untuk menyesuaikan tingkat kesulitan kognitif (Taksonomi Bloom), gaya bahasa, dan jumlah opsi jawaban berdasarkan **Jenjang Target**.
+        ---
+        {pedoman_soal}
+        ---
+
+        **INFORMASI SPESIFIK UNTUK TUGAS INI:**
+        - **Jenjang Target**: {jenjang}
+        - **Materi Utama**: 
+        ---
         {sumber_materi}
+        ---
+
+        **FORMAT OUTPUT (JSON STRING TUNGGAL):**
+        1.  Format output HARUS berupa JSON string tunggal yang valid, tanpa markdown atau teks pembuka/penutup.
+        2.  Struktur JSON adalah sebuah array dari objek, di mana setiap objek adalah satu soal.
+        3.  Setiap objek soal HARUS memiliki kunci "pertanyaan".
+        4.  Jika `jenis_soal` adalah 'Pilihan Ganda', tambahkan kunci "pilihan" (objek) dan "jawaban_benar".
+        5.  Jika `jenis_soal` adalah 'Esai Singkat', tambahkan kunci "jawaban_ideal".
+        6.  **INSTRUKSI PENTING UNTUK VISUAL:**
+            a.  **UNTUK TABEL:** Jika pertanyaan membutuhkan tabel, buatlah tabel tersebut langsung di dalam kunci "pertanyaan" menggunakan format Markdown.
+            b.  **UNTUK GAMBAR:** Jika soal akan lebih baik dengan ilustrasi, tambahkan kunci **"deskripsi_gambar"** berisi deskripsi detail untuk agen pencari gambar, termasuk saran gaya (misal: "diagram ilustrasi", "foto historis"). Jika tidak perlu gambar, jangan sertakan kunci ini.
+
+        Patuhi semua instruksi dengan saksama untuk menghasilkan soal yang berkualitas tinggi dan sesuai secara pedagogis.
         """
         return self._generate_content([prompt])
+    
+    # Search for images based on the description in the soal
+    def search_images_for_soal(self, soal_list):
+        if not self.search_service or not self.google_cse_id:
+            current_app.logger.warning("Google Custom Search API not initialized. Skipping image search for soal.")
+            return soal_list # Kembalikan daftar soal asli jika layanan tidak tersedia
+
+        for soal in soal_list:
+            if "deskripsi_gambar" in soal and soal["deskripsi_gambar"]:
+                query = soal["deskripsi_gambar"]
+                search_query_with_params = f"{query} educational content" # Tambahkan 'educational content' atau sejenisnya
+                
+                try:
+                    # Panggil Google Custom Search API yang sesungguhnya
+                    res = self.search_service.cse().list(
+                        q=search_query_with_params,
+                        cx=self.google_cse_id,
+                        searchType='image',
+                        num=1 # Ambil 1 gambar paling relevan
+                    ).execute()
+
+                    if res and 'items' in res and res['items']:
+                        image_url = res['items'][0]['link']
+                        soal["saran_gambar"] = [image_url] # Simpan sebagai list, karena bisa ada multiple
+                        current_app.logger.info(f"Gambar ditemukan untuk '{query}': {image_url}")
+                    else:
+                        current_app.logger.info(f"Tidak ada gambar ditemukan untuk '{query}'.")
+                        soal["saran_gambar"] = [] # Kosongkan jika tidak ada gambar
+                except Exception as e:
+                    current_app.logger.error(f"Error saat mencari gambar untuk '{query}': {e}", exc_info=True)
+                    soal["saran_gambar"] = [] # Kosongkan jika terjadi error
+        
+        return soal_list

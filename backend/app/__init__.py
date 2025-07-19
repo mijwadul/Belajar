@@ -19,10 +19,9 @@ def create_app():
     app.config["JWT_TOKEN_LOCATION"] = ["headers"]
     app.config["JWT_CSRF_PROTECTION"] = False
     app.config["GEMINI_MODEL"] = Config.GEMINI_MODEL
-    
-    # --- PERBAIKAN DI SINI ---
-    # Tambahkan baris ini untuk memuat kunci API ke dalam konfigurasi aplikasi
     app.config["GEMINI_API_KEY"] = Config.GEMINI_API_KEY
+    app.config["GOOGLE_API_KEY"] = Config.GOOGLE_API_KEY
+    app.config["GOOGLE_CSE_ID"] = Config.GOOGLE_CSE_ID
 
     # --- INISIALISASI EKSTENSI ---
     db.init_app(app)
