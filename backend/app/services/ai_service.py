@@ -2,21 +2,23 @@ import os
 import PyPDF2
 from PIL import Image
 import pytesseract
-import google.generativeai as genai
+from together import Together
 import json
 from flask import current_app
+#import google.generativeai as genai
 from googleapiclient.discovery import build
 
 pytesseract.pytesseract.tesseract_cmd = r'D:\Games\Tesseract\tesseract.exe'
 
 class AIService:
-    def __init__(self, api_key, model_name='gemini-1.5-flash'):
+    def __init__(self, api_key, model_name) : #'gemini-1.5-flash')
         if not api_key:
-            raise ValueError("Kunci API Gemini harus disediakan.")
+            raise ValueError("Kunci API harus disediakan.")
         self.api_key = api_key
-        
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.model_name = model_name # Simpan nama model
+        self.client = Together(api_key=self.api_key)
+        #genai.configure(api_key=self.api_key)
+        #self.model = genai.GenerativeModel(model_name)
 
         google_api_key = current_app.config.get('GOOGLE_API_KEY')
         google_cse_id = current_app.config.get('GOOGLE_CSE_ID')
@@ -32,11 +34,19 @@ class AIService:
 
     def _generate_content(self, prompt_parts):
         try:
-            response = self.model.generate_content(prompt_parts)
-            return response.text
+            messages_payload = []
+            if isinstance(prompt_parts, list):
+                messages_payload.append({"role": "user", "content": "".join(prompt_parts)})
+            else:
+                messages_payload.append({"role": "user", "content": prompt_parts})
+
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages_payload
+            )
+            return response.choices[0].message.content
         except Exception as e:
-            # Menggunakan logger dari Flask butuh current_app, jadi kita ganti dengan print untuk skrip standalone
-            print(f"Error saat menghubungi Gemini API: {e}")
+            current_app.logger.error(f"Error saat menghubungi Together AI API: {e}", exc_info=True)
             raise RuntimeError(f"Gagal menghasilkan konten dari AI: {e}")
 
     def extract_text_from_file(self, file_path):

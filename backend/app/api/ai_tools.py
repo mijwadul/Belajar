@@ -28,16 +28,14 @@ bp = Blueprint('ai_api', __name__, url_prefix='/api')
 
 # 1. Fungsi Bantuan untuk mendapatkan instance AIService
 def get_ai_service():
-    """
-    Membuat atau mendapatkan instance AIService untuk request saat ini.
-    Ini memastikan instance hanya dibuat sekali per request dan memiliki akses
-    ke konfigurasi aplikasi yang sudah aktif.
-    """
     if 'ai_service' not in g:
-        api_key = current_app.config.get('GEMINI_API_KEY')
-        model_name = current_app.config.get('GEMINI_MODEL', 'gemini-1.5-flash')
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY tidak ditemukan di konfigurasi aplikasi.")
+        api_key = current_app.config.get('TOGETHER_API_KEY')
+        model_name = current_app.config.get('TOGETHER_MODEL')
+        
+        if not api_key or not model_name:
+            current_app.logger.error("Together AI API key atau model name tidak ditemukan dalam konfigurasi aplikasi.")
+            raise RuntimeError("Konfigurasi Together AI tidak lengkap. Pastikan TOGETHER_API_KEY dan TOGETHER_MODEL diatur.")
+        
         g.ai_service = AIService(api_key=api_key, model_name=model_name)
     return g.ai_service
 
