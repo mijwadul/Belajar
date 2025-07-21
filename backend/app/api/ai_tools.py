@@ -365,8 +365,11 @@ def generate_soal_endpoint():
     if rpp.user_id != user_id:
         return jsonify({'message': 'Akses ditolak.'}), 403
 
-    sertakan_ilustrasi = data.get('sertakan_ilustrasi', False)
+    # Logika 'sertakan_ilustrasi' dihapus karena sekarang diatur secara otomatis
+    # sertakan_ilustrasi = data.get('sertakan_ilustrasi', False) 
+    
     jenjang_kelas = rpp.kelas.jenjang if rpp.kelas else 'Umum'
+    jumlah_soal_diminta = data.get('jumlah_soal', 5) # Pastikan default jika tidak ada
 
     try:
         ai_service = get_ai_service()
@@ -374,13 +377,12 @@ def generate_soal_endpoint():
         hasil_soal_json_str = ai_service.generate_soal_from_ai(
             sumber_materi=rpp.konten_markdown,
             jenis_soal=data.get('jenis_soal'),
-            jumlah_soal=data.get('jumlah_soal'),
+            jumlah_soal=jumlah_soal_diminta, # Menggunakan jumlah_soal_diminta
             jenjang=jenjang_kelas
         )
         
-        # --- PERBAIKAN: Logika pembersihan dan parsing yang lebih cerdas ---
+        # --- Logika pembersihan dan parsing JSON dari respons AI ---
         soal_list = None
-        # Hapus blok kode Markdown jika ada
         if "```json" in hasil_soal_json_str:
             clean_str = hasil_soal_json_str.split('```json', 1)[1].rsplit('```', 1)[0]
         else:
@@ -388,16 +390,58 @@ def generate_soal_endpoint():
 
         try:
             soal_list = json.loads(clean_str.strip())
-        except json.JSONDecodeError:
-            current_app.logger.error(f"AI mengembalikan respons non-JSON bahkan setelah dibersihkan: {clean_str}")
+            if not isinstance(soal_list, list):
+                raise ValueError("Respons AI bukan dalam format list of objects.")
+        except (json.JSONDecodeError, ValueError) as e:
+            current_app.logger.error(f"AI mengembalikan respons non-JSON atau format tidak valid: {e}. Raw: {hasil_soal_json_str}")
             return jsonify({'message': 'AI gagal menghasilkan format soal yang valid. Silakan coba lagi.'}), 500
         # ----------------------------------------------------------------
 
-        if sertakan_ilustrasi and isinstance(soal_list, list):
-            soal_list_with_images = ai_service.search_images_for_soal(soal_list)
-            return jsonify(soal_list_with_images)
-        else:
-            return jsonify(soal_list)
+        # --- LOGIKA BARU: Terapkan aturan 3 dari 5 gambar/tabel secara proporsional ---
+        
+        # Menentukan target jumlah soal dengan visual (minimal 1 jika ada soal, proporsional)
+        # Akan mengusahakan 60% dari total soal memiliki visual, dibulatkan.
+        target_visual_count = min(jumlah_soal_diminta, max(1, round(jumlah_soal_diminta * 0.6)))
+        
+        candidates_for_visuals = []
+        no_visuals = []
+
+        # Pisahkan soal berdasarkan potensi visual (punya deskripsi_gambar atau tabel)
+        for soal in soal_list:
+            # Periksa apakah soal memiliki deskripsi gambar ATAU tabel tertanam
+            # Mengidentifikasi tabel dengan mencari sintaks markdown tabel
+            has_table_in_question = ("|" in soal.get("pertanyaan", "") and 
+                                     "---" in soal.get("pertanyaan", "") and 
+                                     soal.get("pertanyaan", "").count("|") >= 2)
+
+            if soal.get("deskripsi_gambar") and soal["deskripsi_gambar"] or has_table_in_question:
+                candidates_for_visuals.append(soal)
+            else:
+                no_visuals.append(soal)
+
+        final_soal_list = []
+        visuals_added_count = 0
+
+        # Prioritaskan soal yang memiliki potensi visual
+        for soal in candidates_for_visuals:
+            if visuals_added_count < target_visual_count:
+                # Jika soal ini memiliki deskripsi gambar, cari gambarnya
+                if soal.get("deskripsi_gambar") and soal["deskripsi_gambar"]:
+                    processed_soal = ai_service.search_images_for_soal([soal])[0]
+                    final_soal_list.append(processed_soal)
+                else: # Soal ini memiliki tabel (sudah ada di soal["pertanyaan"])
+                    final_soal_list.append(soal)
+                visuals_added_count += 1
+            else:
+                no_visuals.append(soal) 
+        
+        # Tambahkan soal tanpa visual hingga mencapai jumlah yang diminta
+        remaining_needed = jumlah_soal_diminta - len(final_soal_list)
+        if remaining_needed > 0:
+            final_soal_list.extend(no_visuals[:remaining_needed])
+        
+        # Potong list jika AI menghasilkan lebih dari jumlah_soal_diminta (atau jika logika di atas menambahkan lebih)
+        return jsonify(final_soal_list[:jumlah_soal_diminta])
 
     except Exception as e:
         current_app.logger.error(f"Error saat generate soal: {e}", exc_info=True)

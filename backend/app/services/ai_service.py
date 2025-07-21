@@ -5,20 +5,17 @@ import pytesseract
 from together import Together
 import json
 from flask import current_app
-#import google.generativeai as genai
 from googleapiclient.discovery import build
 
 pytesseract.pytesseract.tesseract_cmd = r'D:\Games\Tesseract\tesseract.exe'
 
 class AIService:
-    def __init__(self, api_key, model_name) : #'gemini-1.5-flash')
+    def __init__(self, api_key, model_name) :
         if not api_key:
             raise ValueError("Kunci API harus disediakan.")
         self.api_key = api_key
-        self.model_name = model_name # Simpan nama model
+        self.model_name = model_name
         self.client = Together(api_key=self.api_key)
-        #genai.configure(api_key=self.api_key)
-        #self.model = genai.GenerativeModel(model_name)
 
         google_api_key = current_app.config.get('GOOGLE_API_KEY')
         google_cse_id = current_app.config.get('GOOGLE_CSE_ID')
@@ -111,7 +108,7 @@ class AIService:
         2.  **PENGEMBANGAN KONTEN**: Gunakan kreativitas Anda untuk mengembangkan konten RPP (Tujuan Pembelajaran, Kegiatan Pembelajaran, Asesmen) agar selaras dengan **Topik Utama**.
         3.  **ENRICHMENT (PENAMBAHAN KOLOM)**: 
             - **ANALISIS FILE REFERENSI**: Analisis teks dari **BAGIAN 2**.
-            - **TAMBAHKAN JIKA RELEVAN**: Jika Anda menemukan informasi yang relevan dengan **Topik Utama** untuk kolom-kolom seperti **"Profil Pelajar Pancasila"**, **"Sarana dan Prasarana"**, **"Kompetensi Awal"**, atau **"Pemahaman Bermakna"**, maka **TAMBAHKAN kolom-kolom tersebut** ke dalam RPP yang Anda hasilkan.
+            - **TAMBAHKAN JIKA RELEVAN**: Jika Anda menemukan informasi yang relevan dengan **Topik Utama** untuk kolom-kolom seperti **"Profil Pelajar Pancasila"**, **"Sarana dan Prasarana"**, **"Kompetensi Awal"**, atau **"Pemahaman Bermakna"**, maka **TAMBAKKAN kolom-kolom tersebut** ke dalam RPP yang Anda hasilkan.
             - **JANGAN TAMBAHKAN JIKA TIDAK RELEVAN**: Jika informasi tersebut tidak ada atau tidak relevan, jangan paksakan untuk menambahkannya.
         4.  **STRUKTUR OUTPUT**: RPP harus memiliki struktur yang jelas, mencakup minimal:
             - A. Informasi Umum (Identitas, Nama Penyusun, Kompetensi Awal, dll.)
@@ -151,11 +148,13 @@ class AIService:
         1.  Format output HARUS berupa JSON string tunggal yang valid, tanpa markdown atau teks pembuka/penutup.
         2.  Struktur JSON adalah sebuah array dari objek, di mana setiap objek adalah satu soal.
         3.  Setiap objek soal HARUS memiliki kunci "pertanyaan".
-        4.  Jika `jenis_soal` adalah 'Pilihan Ganda', tambahkan kunci "pilihan" (objek) dan "jawaban_benar".
-        5.  Jika `jenis_soal` adalah 'Esai Singkat', tambahkan kunci "jawaban_ideal".
-        6.  **INSTRUKSI PENTING UNTUK VISUAL:**
-            a.  **UNTUK TABEL:** Jika pertanyaan membutuhkan tabel, buatlah tabel tersebut langsung di dalam kunci "pertanyaan" menggunakan format Markdown.
-            b.  **UNTUK GAMBAR:** Jika soal akan lebih baik dengan ilustrasi, tambahkan kunci **"deskripsi_gambar"** berisi deskripsi detail untuk agen pencari gambar, termasuk saran gaya (misal: "diagram ilustrasi", "foto historis"). Jika tidak perlu gambar, jangan sertakan kunci ini.
+        4.  **INSTRUKSI PENTING UNTUK KONTEKS GAMBAR:** Tambahkan kunci **"kategori_topik"** (string) yang berisi kategori umum atau topik spesifik soal tersebut (contoh: "Biologi Sel", "Fisika Klasik", "Sejarah Kemerdekaan Indonesia", "Aturan Sepak Bola"). Ini akan **sangat membantu** dalam pencarian gambar yang relevan secara global. Jika soal tidak memiliki kategori spesifik, berikan topik utama soal.
+        5.  Jika `jenis_soal` adalah 'Pilihan Ganda', tambahkan kunci "pilihan" (objek) dan "jawaban_benar".
+        6.  Jika `jenis_soal` adalah 'Esai Singkat', tambahkan kunci "jawaban_ideal".
+        7.  **INSTRUKSI PENTING UNTUK VISUAL (GAMBAR/TABEL):**
+            a.  **UNTUK TABEL:** Jika pertanyaan akan lebih efektif dengan penyajian data dalam format tabel, buatlah tabel tersebut langsung di dalam kunci "pertanyaan" menggunakan format Markdown.
+            b.  **UNTUK GAMBAR:** Jika pertanyaan akan sangat terbantu dengan ilustrasi visual (gambar), tambahkan kunci **"deskripsi_gambar"** berisi deskripsi detail untuk agen pencari gambar. Sertakan saran gaya (misal: "diagram ilustrasi", "foto historis", "peta", "grafik"). **Sertakan deskripsi gambar ini jika soal sangat relevan dan akan jauh lebih baik dengan visual.**
+            c.  Jika soal tidak memerlukan visual (baik gambar atau tabel) untuk dipahami dengan baik, **jangan sertakan kunci "deskripsi_gambar" atau tabel di "pertanyaan"**.
 
         Patuhi semua instruksi dengan saksama untuk menghasilkan soal yang berkualitas tinggi dan sesuai secara pedagogis.
         """
@@ -165,31 +164,61 @@ class AIService:
     def search_images_for_soal(self, soal_list):
         if not self.search_service or not self.google_cse_id:
             current_app.logger.warning("Google Custom Search API not initialized. Skipping image search for soal.")
-            return soal_list # Kembalikan daftar soal asli jika layanan tidak tersedia
+            return soal_list
 
         for soal in soal_list:
+            # Hanya proses jika ada kunci 'deskripsi_gambar' dan nilainya tidak kosong
             if "deskripsi_gambar" in soal and soal["deskripsi_gambar"]:
-                query = soal["deskripsi_gambar"]
-                search_query_with_params = f"{query} educational content" # Tambahkan 'educational content' atau sejenisnya
+                base_query = soal["deskripsi_gambar"]
                 
+                # Mendapatkan kategori atau topik soal dari output AI (jika ada)
+                kategori_atau_topik = soal.get("kategori_topik", "")
+                
+                # Membangun kueri yang lebih cerdas dan global
+                # Prioritaskan kategori_topik jika ada
+                if kategori_atau_topik:
+                    # Gabungkan deskripsi gambar, kategori/topik, dan istilah umum
+                    enhanced_query = f"{base_query} {kategori_atau_topik} educational diagram illustration scientific"
+                else:
+                    # Jika tidak ada kategori/topik, gunakan deskripsi gambar dan istilah umum saja
+                    enhanced_query = f"{base_query} educational diagram illustration scientific"
+                
+                # Membersihkan spasi ekstra dan memastikan kueri tidak terlalu panjang atau kosong
+                final_search_query = ' '.join(enhanced_query.split()).strip()
+
+                if not final_search_query:
+                    current_app.logger.warning(f"Kueri pencarian gambar kosong untuk deskripsi: '{base_query}'. Melewati pencarian.")
+                    soal["saran_gambar"] = []
+                    continue # Lanjutkan ke soal berikutnya
+
+                current_app.logger.info(f"Mencari gambar dengan kueri: '{final_search_query}'")
+
                 try:
-                    # Panggil Google Custom Search API yang sesungguhnya
                     res = self.search_service.cse().list(
-                        q=search_query_with_params,
+                        q=final_search_query,
                         cx=self.google_cse_id,
                         searchType='image',
-                        num=1 # Ambil 1 gambar paling relevan
+                        num=1 # Cukup 1 gambar yang paling relevan
                     ).execute()
 
                     if res and 'items' in res and res['items']:
-                        image_url = res['items'][0]['link']
-                        soal["saran_gambar"] = [image_url] # Simpan sebagai list, karena bisa ada multiple
-                        current_app.logger.info(f"Gambar ditemukan untuk '{query}': {image_url}")
+                        # Verifikasi bahwa link gambar ada dan valid
+                        image_url = res['items'][0].get('link')
+                        if image_url:
+                            soal["saran_gambar"] = [image_url]
+                            current_app.logger.info(f"Gambar ditemukan untuk '{base_query}': {image_url}")
+                        else:
+                            current_app.logger.info(f"Link gambar tidak ditemukan dalam respons untuk '{base_query}'.")
+                            soal["saran_gambar"] = []
                     else:
-                        current_app.logger.info(f"Tidak ada gambar ditemukan untuk '{query}'.")
-                        soal["saran_gambar"] = [] # Kosongkan jika tidak ada gambar
+                        current_app.logger.info(f"Tidak ada item gambar ditemukan dalam respons untuk '{base_query}'.")
+                        soal["saran_gambar"] = []
                 except Exception as e:
-                    current_app.logger.error(f"Error saat mencari gambar untuk '{query}': {e}", exc_info=True)
-                    soal["saran_gambar"] = [] # Kosongkan jika terjadi error
+                    current_app.logger.error(f"Error saat mencari gambar untuk '{base_query}' (kueri: '{final_search_query}'): {e}", exc_info=True)
+                    soal["saran_gambar"] = []
+            else:
+                # Jika 'deskripsi_gambar' tidak ada atau kosong, pastikan 'saran_gambar' juga kosong
+                soal["saran_gambar"] = []
+                current_app.logger.debug(f"Soal tidak memiliki 'deskripsi_gambar'. Melewati pencarian gambar.")
         
         return soal_list

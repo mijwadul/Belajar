@@ -22,8 +22,7 @@ function QuizGeneratorPage() {
     const [selectedRppId, setSelectedRppId] = useState('');
     const [jenisSoal, setJenisSoal] = useState('Pilihan Ganda');
     const [jumlahSoal, setJumlahSoal] = useState(5);
-    const [sertakanIlustrasi, setSertakanIlustrasi] = useState(false);
-
+    
     // --- PERBAIKAN: Inisialisasi state sebagai array kosong ---
     const [generatedSoal, setGeneratedSoal] = useState([]); 
     const [daftarRpps, setDaftarRpps] = useState([]); 
@@ -70,7 +69,6 @@ function QuizGeneratorPage() {
                 rpp_id: selectedRppId,
                 jenis_soal: jenisSoal,
                 jumlah_soal: jumlahSoal,
-                sertakan_ilustrasi: sertakanIlustrasi,
             };
 
             const response = await generateSoalFromAI(dataToGenerate);
@@ -157,13 +155,6 @@ function QuizGeneratorPage() {
                                 inputProps={{ min: 1, max: 20 }}
                                 fullWidth
                             />
-                            <FormControlLabel
-                                control={<Checkbox checked={sertakanIlustrasi} onChange={(e) => setSertakanIlustrasi(e.target.checked)} />}
-                                label="Sertakan Saran Ilustrasi/Tabel"
-                            />
-                            <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
-                                AI akan mencoba mencari gambar relevan. Proses mungkin lebih lama.
-                            </Typography>
                             <Button type="submit" variant="contained" disabled={isLoading} sx={{ mt: 2, py: 1.5 }}>
                                 {isLoading ? <CircularProgress size={24} /> : 'Buat Soal'}
                             </Button>
